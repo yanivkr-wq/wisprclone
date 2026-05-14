@@ -1,0 +1,34 @@
+# Build output
+bin/
+obj/
+out/
+*.user
+*.suo
+
+# IDE
+.vs/
+.idea/
+.vscode/
+
+# Runtime / debug
+*.log
+debug/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Models (downloaded on first run, not committed)
+models/
+*.bin
+*.gguf
+*.xml
+*.onnx
+
+# NuGet
+*.nupkg
+.nuget/
+packages/
+
+# Inno Setup compile output (~50 MB installer, don't commit)
+installer/Output/

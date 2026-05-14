@@ -1,0 +1,105 @@
+<Window x:Class="WisprClone.App.Ui.WelcomeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Welcome to WisprClone"
+        Width="620" Height="560"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#FFFAFAFA"
+        FontFamily="Segoe UI">
+    <Grid Margin="32,28,32,28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,24">
+            <TextBlock Text="Welcome to WisprClone"
+                       FontSize="24"
+                       FontWeight="SemiBold"/>
+            <TextBlock Text="Hold Ctrl+Win to dictate. Local hotkey, cloud transcription."
+                       FontSize="13"
+                       Foreground="#888"
+                       Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Body -->
+        <StackPanel Grid.Row="1">
+            <TextBlock TextWrapping="Wrap" FontSize="13" Margin="0,0,0,20">
+                WisprClone uses OpenAI's Whisper API for transcription. You'll need an API key with a small amount of pre-paid credit. Typical use costs under $1/month.
+            </TextBlock>
+
+            <!-- Step 1 -->
+            <Border Background="White" CornerRadius="6" Padding="16,12" Margin="0,0,0,12"
+                    BorderBrush="#E0E0E0" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock FontWeight="SemiBold" FontSize="13">
+                        Step 1  —  Create an API key
+                    </TextBlock>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#555" Margin="0,4,0,0">
+                        <Hyperlink NavigateUri="https://platform.openai.com/api-keys"
+                                   RequestNavigate="OnHyperlink_RequestNavigate">platform.openai.com/api-keys</Hyperlink>
+                        — sign in, click "Create new secret key", name it "WisprClone", copy the value. It starts with <Run FontFamily="Consolas">sk-</Run>.
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <!-- Step 2 -->
+            <Border Background="White" CornerRadius="6" Padding="16,12" Margin="0,0,0,12"
+                    BorderBrush="#E0E0E0" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock FontWeight="SemiBold" FontSize="13">
+                        Step 2  —  Add credit
+                    </TextBlock>
+                    <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#555" Margin="0,4,0,0">
+                        <Hyperlink NavigateUri="https://platform.openai.com/settings/organization/billing/overview"
+                                   RequestNavigate="OnHyperlink_RequestNavigate">platform.openai.com/.../billing</Hyperlink>
+                        — click "Add to credit balance", load $5 (minimum). Enable auto-recharge so you don't think about it again.
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <!-- Step 3 -->
+            <Border Background="White" CornerRadius="6" Padding="16,12" Margin="0,0,0,8"
+                    BorderBrush="#E0E0E0" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock FontWeight="SemiBold" FontSize="13" Margin="0,0,0,6">
+                        Step 3  —  Paste your key here
+                    </TextBlock>
+                    <PasswordBox x:Name="ApiKeyBox"
+                                 FontFamily="Consolas"
+                                 FontSize="12"
+                                 Padding="8,6"/>
+                    <TextBlock FontSize="11" Foreground="#888" Margin="0,4,0,0">
+                        Saved to your settings.json — only on this machine, never uploaded anywhere except OpenAI's API.
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <TextBlock x:Name="StatusText"
+                       Foreground="#D9534F"
+                       FontSize="12"
+                       Margin="0,12,0,0"
+                       Visibility="Collapsed"
+                       TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Footer buttons -->
+        <StackPanel Grid.Row="2"
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Margin="0,16,0,0">
+            <Button Content="Cancel and exit"
+                    Width="120" Height="32"
+                    Margin="0,0,8,0"
+                    IsCancel="True"
+                    Click="OnCancel_Click"/>
+            <Button Content="Save and start"
+                    Width="120" Height="32"
+                    IsDefault="True"
+                    Click="OnSave_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

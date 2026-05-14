@@ -1,0 +1,209 @@
+using System;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using Hardcodet.Wpf.TaskbarNotification;
+using Serilog;
+using WisprClone.App.Injection;
+using WisprClone.App.Ui.Branding;
+
+namespace WisprClone.App.Tray;
+
+/// <summary>
+/// Hosts the Windows tray icon and its right-click context menu.
+/// Menu structure:
+///   Recent ▶  (last N transcriptions — click to re-paste into current focus)
+///   ─────
+///   Start with Windows  (checkable)
+///   Open settings file
+///   Open log folder
+///   ─────
+///   Quit
+/// </summary>
+public sealed class TrayManager : IDisposable
+{
+    private readonly HistoryStore _history;
+    private readonly ClipboardInjector _injector;
+    private readonly Action _openSettings;
+    private readonly Action _checkForUpdates;
+    private readonly TaskbarIcon _icon;
+    private readonly MenuItem _recentMenu;
+    private readonly MenuItem _autostartMenu;
+
+    public TrayManager(HistoryStore history, ClipboardInjector injector, Action openSettings, Action checkForUpdates)
+    {
+        _history = history;
+        _injector = injector;
+        _openSettings = openSettings;
+        _checkForUpdates = checkForUpdates;
+
+        _recentMenu = new MenuItem { Header = "Recent dictations" };
+        _autostartMenu = new MenuItem
+        {
+            Header = "Start with Windows",
+            IsCheckable = true,
+            IsChecked = AutostartHelper.IsEnabled()
+        };
+        _autostartMenu.Click += OnAutostartToggled;
+
+        var settingsItem = new MenuItem { Header = "Settings…" };
+        settingsItem.Click += (_, _) => _openSettings();
+
+        var logsItem = new MenuItem { Header = "Open log folder…" };
+        logsItem.Click += (_, _) => OpenFolder(Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "WisprClone", "logs"));
+
+        var updatesItem = new MenuItem { Header = "Check for updates…" };
+        updatesItem.Click += (_, _) => _checkForUpdates();
+
+        var quitItem = new MenuItem { Header = "Quit" };
+        quitItem.Click += (_, _) => System.Windows.Application.Current.Shutdown();
+
+        var menu = new ContextMenu();
+        menu.Items.Add(_recentMenu);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(_autostartMenu);
+        menu.Items.Add(settingsItem);
+        menu.Items.Add(logsItem);
+        menu.Items.Add(updatesItem);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(quitItem);
+
+        // Rebuild the recent submenu lazily, when the menu actually opens —
+        // saves us subscribing to history Changed events with dispatcher
+        // marshalling.
+        menu.Opened += (_, _) => RebuildRecentMenu();
+
+        _icon = new TaskbarIcon
+        {
+            Icon = BuildTrayIcon(),
+            ToolTipText = "WisprClone — hold Ctrl+Win to dictate",
+            ContextMenu = menu
+        };
+
+        Log.Information("Tray icon ready");
+    }
+
+    private void OnAutostartToggled(object sender, RoutedEventArgs e)
+    {
+        AutostartHelper.SetEnabled(_autostartMenu.IsChecked);
+        // Re-sync in case the registry write was rejected.
+        _autostartMenu.IsChecked = AutostartHelper.IsEnabled();
+    }
+
+    private void RebuildRecentMenu()
+    {
+        _recentMenu.Items.Clear();
+        var entries = _history.Snapshot();
+        if (entries.Count == 0)
+        {
+            var placeholder = new MenuItem { Header = "(no dictations yet)", IsEnabled = false };
+            _recentMenu.Items.Add(placeholder);
+            return;
+        }
+
+        foreach (var entry in entries.Take(20)) // submenu cap, not history cap
+        {
+            // Trim long entries so the menu stays usable.
+            var preview = entry.Text.Length > 60
+                ? entry.Text[..57] + "…"
+                : entry.Text;
+
+            var item = new MenuItem
+            {
+                Header = preview,
+                ToolTip = entry.Text + "\n\n" + entry.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")
+            };
+            // Capture entry by-value for the closure.
+            var textCopy = entry.Text;
+            item.Click += async (_, _) => await RePasteAsync(textCopy);
+            _recentMenu.Items.Add(item);
+        }
+    }
+
+    private async Task RePasteAsync(string text)
+    {
+        // Wait for the context menu to fully close (so focus returns to the
+        // window the user was in) before injecting.
+        await Task.Delay(150);
+        try
+        {
+            _injector.InjectText(text);
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Re-paste failed");
+        }
+    }
+
+    private static void OpenInNotepad(string path)
+    {
+        try
+        {
+            // CreateDirectory ensures the file's parent exists; touch the file
+            // if it's missing so notepad doesn't pop a "create new?" dialog.
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+            if (!File.Exists(path)) File.WriteAllText(path, "{}\n");
+
+            Process.Start(new ProcessStartInfo("notepad.exe", path) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to open {Path} in notepad", path);
+        }
+    }
+
+    private static void OpenFolder(string path)
+    {
+        try
+        {
+            Directory.CreateDirectory(path);
+            Process.Start(new ProcessStartInfo("explorer.exe", path) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Log.Error(ex, "Failed to open folder {Path}", path);
+        }
+    }
+
+    /// <summary>
+    /// Generates the multi-resolution mic-on-blue-circle .ico on first run,
+    /// caches it next to the app data, and loads it from disk on subsequent
+    /// runs. The icon design lives in IconFactory.
+    /// </summary>
+    private static Icon BuildTrayIcon()
+    {
+        var iconDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "WisprClone");
+        Directory.CreateDirectory(iconDir);
+        var iconPath = Path.Combine(iconDir, "tray.ico");
+
+        try
+        {
+            // Always regenerate during development — cheap and avoids stale
+            // icons from older builds sticking around. Could be guarded with
+            // a version check if regeneration cost matters.
+            IconFactory.SaveAsIco(iconPath);
+            return new Icon(iconPath);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to render tray icon to {Path}; falling back to SystemIcons.Application", iconPath);
+            return SystemIcons.Application;
+        }
+    }
+
+    public void Dispose()
+    {
+        _icon.Dispose();
+    }
+}
