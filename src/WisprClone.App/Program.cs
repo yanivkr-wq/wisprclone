@@ -9,6 +9,7 @@ using WisprClone.App.Audio;
 using WisprClone.App.Hotkey;
 using WisprClone.App.Injection;
 using WisprClone.App.Pipeline;
+using WisprClone.App.Refinement;
 using WisprClone.App.Settings;
 using WisprClone.App.Transcription;
 using WisprClone.App.Tray;
@@ -33,6 +34,7 @@ internal static class Program
     private static TrayManager? _tray;
     private static FloatingPill? _pill;
     private static UpdateService? _updates;
+    private static RefinementService? _refiner;
 
     [STAThread]
     private static int Main()
@@ -94,6 +96,7 @@ internal static class Program
             _hook?.Dispose();
             _mic?.Dispose();
             _whisper?.Dispose();
+            _refiner?.Dispose();
             Log.Information("WisprClone exited (code {Code})", exitCode);
             Log.CloseAndFlush();
         }
@@ -113,11 +116,23 @@ internal static class Program
             return;
         }
 
+        // Sweep stale wav debug files from previous runs.
+        Audio.WavJanitor.PruneOlderThanRetention();
+
         _whisper = new WhisperEngine(apiKey);
-        _hook = new LowLevelKeyboardHook();
+        _refiner = new RefinementService(apiKey, settings.RefinementModel);
+
+        var hotkeySpec = HotkeySpec.Parse(settings.Hotkey);
+        Log.Information("Hotkey: {Hotkey}", hotkeySpec.Name);
+        _hook = new LowLevelKeyboardHook(hotkeySpec);
         _mic = new MicCapture();
         _coordinator = new DictationCoordinator(
-            _hook, _mic, _whisper, settings.HotkeyMode, settings.MaxRecordingSeconds);
+            _hook, _mic, _whisper,
+            settings.HotkeyMode,
+            settings.MaxRecordingSeconds,
+            settings.KeepWavFiles,
+            _refiner,
+            settings.OfferRefinement);
         _coordinator.Start();
 
         _pill = new FloatingPill();
@@ -139,7 +154,7 @@ internal static class Program
             {
                 try
                 {
-                    var win = new SettingsWindow(settingsRef, settingsPath, _whisper!, _coordinator!);
+                    var win = new SettingsWindow(settingsRef, settingsPath, _whisper!, _refiner!, _coordinator!);
                     // No Owner — the app has no main window (tray-only), and
                     // assigning Application.Current.MainWindow can throw when
                     // it's null.
@@ -153,6 +168,17 @@ internal static class Program
             checkForUpdates: () =>
             {
                 _ = HandleCheckForUpdatesAsync();
+            },
+            openAbout: () =>
+            {
+                try
+                {
+                    new AboutWindow().ShowDialog();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Failed to open About window");
+                }
             });
 
         _coordinator.RecordingStarted     += () => _pill.SetState(PillState.Recording);

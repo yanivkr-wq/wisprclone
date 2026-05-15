@@ -1,0 +1,59 @@
+<Window x:Class="WisprClone.App.Ui.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="About WisprClone"
+        Width="420" Height="380"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        Background="#FFFAFAFA"
+        FontFamily="Segoe UI">
+    <Grid Margin="28,24,28,20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Icon + title -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,16">
+            <Image x:Name="AppIcon" Width="56" Height="56" Margin="0,0,16,0"/>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="WisprClone" FontSize="22" FontWeight="SemiBold"/>
+                <TextBlock x:Name="VersionText" Text="v0.1.0" FontSize="13" Foreground="#888"/>
+            </StackPanel>
+        </StackPanel>
+
+        <!-- Tagline -->
+        <TextBlock Grid.Row="1" TextWrapping="Wrap" Margin="0,0,0,16" FontSize="13">
+            A Wispr Flow–style dictation app for Windows. Hold the hotkey, speak,
+            and the transcribed text auto-pastes into whatever's focused.
+        </TextBlock>
+
+        <!-- Tech notes / links -->
+        <StackPanel Grid.Row="2" Margin="0,0,0,0">
+            <TextBlock FontSize="12" Foreground="#555" Margin="0,0,0,8">
+                Transcription: <Hyperlink NavigateUri="https://platform.openai.com/docs/guides/speech-to-text"
+                                          RequestNavigate="OnHyperlink_RequestNavigate">OpenAI Whisper API</Hyperlink>
+            </TextBlock>
+            <TextBlock FontSize="12" Foreground="#555" Margin="0,0,0,8">
+                Manage API keys: <Hyperlink NavigateUri="https://platform.openai.com/api-keys"
+                                            RequestNavigate="OnHyperlink_RequestNavigate">platform.openai.com/api-keys</Hyperlink>
+            </TextBlock>
+            <TextBlock FontSize="12" Foreground="#555" Margin="0,0,0,8">
+                Billing &amp; credits: <Hyperlink NavigateUri="https://platform.openai.com/settings/organization/billing/overview"
+                                                 RequestNavigate="OnHyperlink_RequestNavigate">platform.openai.com/billing</Hyperlink>
+            </TextBlock>
+
+            <TextBlock FontSize="11" Foreground="#999" Margin="0,12,0,0" TextWrapping="Wrap">
+                Built with .NET 8 + WPF, NAudio, Hardcodet.NotifyIcon.Wpf, Velopack, Serilog, Inno Setup.
+                Hotkey via WH_KEYBOARD_LL, text injection via Win32 SendInput.
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Close -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Close" Width="92" Height="32" IsDefault="True" IsCancel="True" Click="OnClose_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

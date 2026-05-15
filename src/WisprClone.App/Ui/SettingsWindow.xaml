@@ -37,17 +37,32 @@
                            RequestNavigate="OnHyperlink_RequestNavigate">Get / manage keys at OpenAI →</Hyperlink>
             </TextBlock>
 
+            <!-- Hotkey key -->
+            <TextBlock Text="Hotkey" FontWeight="SemiBold" FontSize="13"/>
+            <ComboBox x:Name="HotkeyKeyCombo"
+                      Margin="0,6,0,4"
+                      Padding="8,6"
+                      FontSize="13">
+                <ComboBoxItem Content="Ctrl + Win  —  the default (no third key)" Tag="Ctrl+Win"/>
+                <ComboBoxItem Content="Right Alt  —  single key, comfortable for thumb" Tag="Right Alt"/>
+                <ComboBoxItem Content="F8" Tag="F8"/>
+                <ComboBoxItem Content="F9" Tag="F9"/>
+            </ComboBox>
+            <TextBlock FontSize="11" Foreground="#888" Margin="0,0,0,16" TextWrapping="Wrap">
+                Hotkey changes take effect after restarting WisprClone.
+            </TextBlock>
+
             <!-- Hotkey mode -->
-            <TextBlock Text="Hotkey mode" FontWeight="SemiBold" FontSize="13"/>
+            <TextBlock Text="Hotkey behaviour" FontWeight="SemiBold" FontSize="13"/>
             <ComboBox x:Name="HotkeyCombo"
                       Margin="0,6,0,4"
                       Padding="8,6"
                       FontSize="13">
-                <ComboBoxItem Content="Push-to-talk  —  hold Ctrl+Win while speaking" Tag="PushToTalk"/>
-                <ComboBoxItem Content="Toggle  —  tap once to start, tap again to stop" Tag="Toggle"/>
+                <ComboBoxItem Content="Push-to-talk  —  hold to record" Tag="PushToTalk"/>
+                <ComboBoxItem Content="Toggle  —  tap once on / once off" Tag="Toggle"/>
             </ComboBox>
             <TextBlock FontSize="11" Foreground="#888" Margin="0,0,0,20" TextWrapping="Wrap">
-                The hotkey itself is Ctrl+Win and is not yet user-configurable in v1.
+                Push-to-talk works well for short clips; Toggle for longer dictation.
             </TextBlock>
 
             <!-- Max recording length -->
@@ -79,6 +94,24 @@
                          Padding="6,4"
                          Margin="12,0,0,0"/>
             </Grid>
+
+            <!-- Refinement -->
+            <CheckBox x:Name="OfferRefinementCheck"
+                      Content="Offer to refine dictations (Professional / Casual / Shorter / Longer)"
+                      FontSize="13" Margin="0,4,0,4"/>
+            <TextBlock FontSize="11" Foreground="#888" Margin="0,0,0,12" TextWrapping="Wrap">
+                After each transcription, a small panel pops up offering AI rewrites via OpenAI.
+                Each refinement costs ≈ $0.0001 (gpt-4o-mini). Panel auto-dismisses after 8&#xa0;s.
+            </TextBlock>
+
+            <!-- Keep WAVs -->
+            <CheckBox x:Name="KeepWavsCheck"
+                      Content="Keep WAV recordings on disk after transcription"
+                      FontSize="13" Margin="0,4,0,4"/>
+            <TextBlock FontSize="11" Foreground="#888" Margin="0,0,0,16" TextWrapping="Wrap">
+                Off (default): deletes the WAV right after a successful transcription. Avoids filling
+                the disk. Files older than 7&#xa0;days are also pruned automatically at app start.
+            </TextBlock>
 
             <!-- Status -->
             <TextBlock x:Name="StatusText"

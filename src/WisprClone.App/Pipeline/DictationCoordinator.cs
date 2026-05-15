@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -8,7 +9,9 @@ using WisprClone.App.Audio;
 using WisprClone.App.Hotkey;
 using WisprClone.App.Injection;
 using WisprClone.App.PostProcess;
+using WisprClone.App.Refinement;
 using WisprClone.App.Transcription;
+using WisprClone.App.Ui;
 
 namespace WisprClone.App.Pipeline;
 
@@ -28,6 +31,9 @@ public sealed class DictationCoordinator : IDisposable
     private readonly ClipboardInjector _injector;
     private HotkeyMode _mode;
     private int _maxRecordingSeconds;
+    private bool _keepWavFiles;
+    private bool _offerRefinement;
+    private RefinementService? _refiner;
     private readonly Dispatcher _dispatcher;
     private readonly System.Threading.Timer _maxLengthTimer;
 
@@ -45,7 +51,10 @@ public sealed class DictationCoordinator : IDisposable
         MicCapture mic,
         WhisperEngine? whisper,
         HotkeyMode mode,
-        int maxRecordingSeconds = 120)
+        int maxRecordingSeconds = 120,
+        bool keepWavFiles = false,
+        RefinementService? refiner = null,
+        bool offerRefinement = false)
     {
         _hook = hook;
         _mic = mic;
@@ -53,6 +62,9 @@ public sealed class DictationCoordinator : IDisposable
         _injector = new ClipboardInjector();
         _mode = mode;
         _maxRecordingSeconds = maxRecordingSeconds;
+        _keepWavFiles = keepWavFiles;
+        _refiner = refiner;
+        _offerRefinement = offerRefinement;
         _dispatcher = System.Windows.Application.Current?.Dispatcher
             ?? Dispatcher.CurrentDispatcher;
         _maxLengthTimer = new System.Threading.Timer(OnMaxLengthReached, null, Timeout.Infinite, Timeout.Infinite);
@@ -69,11 +81,14 @@ public sealed class DictationCoordinator : IDisposable
     /// Lets the settings window change hotkey behaviour at runtime without
     /// rebuilding the whole pipeline. Will not interrupt an in-flight recording.
     /// </summary>
-    public void UpdateSettings(HotkeyMode mode, int maxRecordingSeconds)
+    public void UpdateSettings(HotkeyMode mode, int maxRecordingSeconds, bool keepWavFiles, bool offerRefinement)
     {
         _mode = mode;
         _maxRecordingSeconds = maxRecordingSeconds;
-        Log.Information("Coordinator settings updated: mode={Mode}, maxSec={Max}", mode, maxRecordingSeconds);
+        _keepWavFiles = keepWavFiles;
+        _offerRefinement = offerRefinement;
+        Log.Information("Coordinator settings updated: mode={Mode}, maxSec={Max}, keepWavs={Keep}, offerRefine={Refine}",
+            mode, maxRecordingSeconds, keepWavFiles, offerRefinement);
     }
 
     private void OnChordPressed()
@@ -188,7 +203,32 @@ public sealed class DictationCoordinator : IDisposable
             Log.Error(ex, "Failed to inject text into focused window");
         }
 
+        // Successful transcription → the wav is no longer needed unless the
+        // user explicitly opted into keeping them. Best-effort delete.
+        if (!_keepWavFiles)
+        {
+            try { File.Delete(wavPath); }
+            catch (Exception ex) { Log.Debug(ex, "Could not delete {Path}", wavPath); }
+        }
+
         SafeRaise(TranscriptionCompleted, cleaned);
+
+        // Optionally pop the refinement panel after the pill fades.
+        if (_offerRefinement && _refiner != null)
+        {
+            await _dispatcher.InvokeAsync(() =>
+            {
+                try
+                {
+                    var panel = new RefinementPanel(cleaned, _refiner, _injector);
+                    panel.Show();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Failed to show RefinementPanel");
+                }
+            });
+        }
     }
 
     private static void SafeRaise(Action? evt)

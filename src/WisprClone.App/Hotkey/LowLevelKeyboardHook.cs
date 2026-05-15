@@ -5,11 +5,14 @@ using System.Runtime.InteropServices;
 namespace WisprClone.App.Hotkey;
 
 /// <summary>
-/// Global low-level keyboard hook (WH_KEYBOARD_LL).
-/// Detects Ctrl + Win chord press/release events. While the chord is active
-/// AND <see cref="SwallowConflicts"/> is true, it eats Windows-shell shortcuts
-/// that would otherwise fire (Win+Ctrl+Arrow, Win+Ctrl+D, Win+Ctrl+F4)
-/// so virtual-desktop switching doesn't trigger mid-dictation.
+/// Global low-level keyboard hook (WH_KEYBOARD_LL). Generalised to support
+/// either a modifier-only chord (Ctrl+Win) or a single key (Right Alt, F8…)
+/// as defined by the active <see cref="HotkeySpec"/>.
+///
+/// While the chord is active AND <see cref="SwallowConflicts"/> is true, AND
+/// the hotkey happens to be Ctrl+Win, the hook eats Windows-shell shortcuts
+/// (Win+Ctrl+arrow / D / F4) so virtual-desktop switching doesn't trigger
+/// mid-dictation. For non-Ctrl+Win hotkeys there's nothing to suppress.
 /// </summary>
 public sealed class LowLevelKeyboardHook : IDisposable
 {
@@ -24,19 +27,15 @@ public sealed class LowLevelKeyboardHook : IDisposable
     private const int VK_LWIN = 0x5B;
     private const int VK_RWIN = 0x5C;
 
-    private const int VK_LEFT = 0x25;
-    private const int VK_UP = 0x26;
-    private const int VK_RIGHT = 0x27;
-    private const int VK_DOWN = 0x28;
-    private const int VK_D = 0x44;
-    private const int VK_F4 = 0x73;
-
     private readonly LowLevelKeyboardProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
 
     private bool _ctrlDown;
     private bool _winDown;
+    private bool _singleKeyDown;
     private bool _chordActive;
+
+    private readonly HotkeySpec _spec;
 
     public event Action? ChordPressed;
     public event Action? ChordReleased;
@@ -44,11 +43,15 @@ public sealed class LowLevelKeyboardHook : IDisposable
     /// <summary>
     /// When true and the chord is currently held, this hook eats
     /// arrow/D/F4 key presses to prevent virtual-desktop shortcuts.
+    /// Only meaningful for the Ctrl+Win chord.
     /// </summary>
     public bool SwallowConflicts { get; set; }
 
-    public LowLevelKeyboardHook()
+    public LowLevelKeyboardHook() : this(HotkeySpec.CtrlWin) { }
+
+    public LowLevelKeyboardHook(HotkeySpec spec)
     {
+        _spec = spec;
         _proc = HookCallback;
         _hookId = SetHook(_proc);
         if (_hookId == IntPtr.Zero)
@@ -77,25 +80,48 @@ public sealed class LowLevelKeyboardHook : IDisposable
         bool isDown = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
         bool isUp = msg == WM_KEYUP || msg == WM_SYSKEYUP;
 
-        if (vk == VK_LCONTROL || vk == VK_RCONTROL)
+        if (_spec.IsChord)
         {
-            if (isDown) _ctrlDown = true;
-            else if (isUp) _ctrlDown = false;
-            UpdateChordState();
-        }
-        else if (vk == VK_LWIN || vk == VK_RWIN)
-        {
-            if (isDown) _winDown = true;
-            else if (isUp) _winDown = false;
-            UpdateChordState();
-        }
-        else if (_chordActive && SwallowConflicts && isDown)
-        {
-            if (vk == VK_LEFT || vk == VK_RIGHT || vk == VK_UP || vk == VK_DOWN ||
-                vk == VK_D || vk == VK_F4)
+            // Modifier-only chord (e.g. Ctrl+Win).
+            if (vk == VK_LCONTROL || vk == VK_RCONTROL)
             {
-                // Mark as handled — do not pass to Windows shell.
+                if (isDown) _ctrlDown = true;
+                else if (isUp) _ctrlDown = false;
+                UpdateChordState();
+            }
+            else if (vk == VK_LWIN || vk == VK_RWIN)
+            {
+                if (isDown) _winDown = true;
+                else if (isUp) _winDown = false;
+                UpdateChordState();
+            }
+            else if (_chordActive && SwallowConflicts && isDown
+                     && _spec.RequireCtrl && _spec.RequireWin
+                     && (vk == HotkeySpec.VK_LEFT  || vk == HotkeySpec.VK_RIGHT
+                         || vk == HotkeySpec.VK_UP || vk == HotkeySpec.VK_DOWN
+                         || vk == HotkeySpec.VK_D  || vk == HotkeySpec.VK_F4))
+            {
+                // Swallow virtual-desktop shortcuts while Ctrl+Win is held.
                 return new IntPtr(1);
+            }
+        }
+        else
+        {
+            // Single-key hotkey (e.g. Right Alt, F8).
+            if (vk == _spec.Key!.Value)
+            {
+                if (isDown && !_singleKeyDown)
+                {
+                    _singleKeyDown = true;
+                    _chordActive = true;
+                    SafeRaise(ChordPressed);
+                }
+                else if (isUp && _singleKeyDown)
+                {
+                    _singleKeyDown = false;
+                    _chordActive = false;
+                    SafeRaise(ChordReleased);
+                }
             }
         }
 
@@ -104,19 +130,28 @@ public sealed class LowLevelKeyboardHook : IDisposable
 
     private void UpdateChordState()
     {
-        bool both = _ctrlDown && _winDown;
-        if (both && !_chordActive)
+        // All required modifiers must be held. Extra modifiers being held
+        // (e.g. user pressing Ctrl while their hotkey is Win-only) don't
+        // matter — the chord is still considered active.
+        bool active = (!_spec.RequireCtrl || _ctrlDown)
+                      && (!_spec.RequireWin || _winDown);
+
+        if (active && !_chordActive)
         {
             _chordActive = true;
-            try { ChordPressed?.Invoke(); }
-            catch (Exception ex) { Serilog.Log.Error(ex, "ChordPressed handler threw"); }
+            SafeRaise(ChordPressed);
         }
-        else if (!both && _chordActive)
+        else if (!active && _chordActive)
         {
             _chordActive = false;
-            try { ChordReleased?.Invoke(); }
-            catch (Exception ex) { Serilog.Log.Error(ex, "ChordReleased handler threw"); }
+            SafeRaise(ChordReleased);
         }
+    }
+
+    private static void SafeRaise(Action? evt)
+    {
+        try { evt?.Invoke(); }
+        catch (Exception ex) { Serilog.Log.Error(ex, "Hotkey handler threw"); }
     }
 
     public void Dispose()

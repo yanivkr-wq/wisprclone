@@ -1,0 +1,82 @@
+<Window x:Class="WisprClone.App.Ui.RefinementPanel"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        ResizeMode="NoResize"
+        SizeToContent="WidthAndHeight"
+        WindowStartupLocation="Manual"
+        Title="WisprClone Refine">
+    <Border CornerRadius="18"
+            BorderThickness="1"
+            BorderBrush="#33FFFFFF"
+            Padding="14,8">
+        <Border.Background>
+            <SolidColorBrush Color="#1A1A1A" Opacity="0.92"/>
+        </Border.Background>
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+            <TextBlock x:Name="LabelText"
+                       Text="Refine:"
+                       Foreground="#AAA"
+                       FontSize="13"
+                       FontFamily="Segoe UI"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,0"/>
+
+            <StackPanel x:Name="ButtonsPanel" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="ProBtn"     Content="Professional" Click="OnPro_Click"     Style="{DynamicResource ChipStyle}" Margin="0,0,6,0"/>
+                <Button x:Name="CasualBtn"  Content="Casual"       Click="OnCasual_Click"  Style="{DynamicResource ChipStyle}" Margin="0,0,6,0"/>
+                <Button x:Name="ShorterBtn" Content="Shorter"      Click="OnShorter_Click" Style="{DynamicResource ChipStyle}" Margin="0,0,6,0"/>
+                <Button x:Name="LongerBtn"  Content="Longer"       Click="OnLonger_Click"  Style="{DynamicResource ChipStyle}" Margin="0,0,12,0"/>
+                <Button x:Name="DismissBtn" Content="✕"           Click="OnDismiss_Click"  Style="{DynamicResource ChipStyle}"/>
+            </StackPanel>
+
+            <TextBlock x:Name="StatusText"
+                       Text=""
+                       Foreground="#FFC044"
+                       FontSize="12"
+                       VerticalAlignment="Center"
+                       Visibility="Collapsed"/>
+        </StackPanel>
+
+        <Border.Resources>
+            <Style x:Key="ChipStyle" TargetType="Button">
+                <Setter Property="Background" Value="#33FFFFFF"/>
+                <Setter Property="Foreground" Value="White"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="10,4"/>
+                <Setter Property="FontSize" Value="12"/>
+                <Setter Property="FontFamily" Value="Segoe UI"/>
+                <Setter Property="Cursor" Value="Hand"/>
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Button">
+                            <Border x:Name="Bd"
+                                    Background="{TemplateBinding Background}"
+                                    CornerRadius="10"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#55FFFFFF"/>
+                                </Trigger>
+                                <Trigger Property="IsPressed" Value="True">
+                                    <Setter TargetName="Bd" Property="Background" Value="#22FFFFFF"/>
+                                </Trigger>
+                                <Trigger Property="IsEnabled" Value="False">
+                                    <Setter TargetName="Bd" Property="Background" Value="#1AFFFFFF"/>
+                                    <Setter Property="Foreground" Value="#888"/>
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </Border.Resources>
+    </Border>
+</Window>

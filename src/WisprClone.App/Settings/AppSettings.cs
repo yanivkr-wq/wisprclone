@@ -30,6 +30,30 @@ public sealed class AppSettings
     public string UpdateFeedUrl { get; set; } = "";
 
     /// <summary>
+    /// When false (default), the captured .wav for each dictation is deleted
+    /// after successful transcription, to avoid filling the disk over time.
+    /// On transcription failure the wav is preserved (so a power user can
+    /// inspect it). Set true to keep ALL wavs (~32 KB/sec of audio).
+    /// </summary>
+    public bool KeepWavFiles { get; set; } = false;
+
+    /// <summary>
+    /// Hotkey identifier. Currently supported: "Ctrl+Win" (default), "Right Alt",
+    /// "F8", "F9". Hotkey changes require an app restart to take effect.
+    /// </summary>
+    public string Hotkey { get; set; } = "Ctrl+Win";
+
+    /// <summary>
+    /// When true, after each successful dictation the refinement panel pops up
+    /// offering Professional / Casual / Shorter / Longer rewrites via OpenAI.
+    /// Each click costs roughly $0.0001 on gpt-4o-mini.
+    /// </summary>
+    public bool OfferRefinement { get; set; } = false;
+
+    /// <summary>Chat model used for refinement. Defaults to gpt-4o-mini for cost/speed.</summary>
+    public string RefinementModel { get; set; } = "gpt-4o-mini";
+
+    /// <summary>
     /// Resolves the settings file at %APPDATA%\WisprClone\settings.json. Creates
     /// it with a placeholder API key on first run so the user has something to
     /// edit.

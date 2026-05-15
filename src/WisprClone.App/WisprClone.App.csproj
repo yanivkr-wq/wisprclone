@@ -16,6 +16,10 @@
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <Version>0.2.0</Version>
+    <AssemblyVersion>0.2.0.0</AssemblyVersion>
+    <FileVersion>0.2.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,6 +32,14 @@
     <!-- Local Whisper / OpenVINO removed: pivoted to OpenAI Whisper API for
          1-3s latency on any hardware. Audio is POSTed as multipart form-data
          via System.Net.Http (in-box). No NuGet dependency required. -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ship the .ico as a regular file too so the tray manager can load
+         it directly from the install directory instead of regenerating. -->
+    <Content Include="Resources\app.ico">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

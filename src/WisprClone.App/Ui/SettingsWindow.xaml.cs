@@ -6,6 +6,7 @@ using System.Windows.Navigation;
 using Serilog;
 using WisprClone.App.Hotkey;
 using WisprClone.App.Pipeline;
+using WisprClone.App.Refinement;
 using WisprClone.App.Settings;
 using WisprClone.App.Transcription;
 
@@ -16,12 +17,14 @@ public partial class SettingsWindow : Window
     private readonly AppSettings _settings;
     private readonly string _settingsPath;
     private readonly WhisperEngine _whisper;
+    private readonly RefinementService _refiner;
     private readonly DictationCoordinator _coordinator;
 
     public SettingsWindow(
         AppSettings settings,
         string settingsPath,
         WhisperEngine whisper,
+        RefinementService refiner,
         DictationCoordinator coordinator)
     {
         InitializeComponent();
@@ -29,6 +32,7 @@ public partial class SettingsWindow : Window
         _settings = settings;
         _settingsPath = settingsPath;
         _whisper = whisper;
+        _refiner = refiner;
         _coordinator = coordinator;
 
         PopulateFromSettings();
@@ -47,6 +51,22 @@ public partial class SettingsWindow : Window
 
         HotkeyCombo.SelectedIndex = _settings.HotkeyMode == HotkeyMode.PushToTalk ? 0 : 1;
         MaxSlider.Value = Math.Clamp(_settings.MaxRecordingSeconds, (int)MaxSlider.Minimum, (int)MaxSlider.Maximum);
+
+        // Match the saved hotkey to one of the combo items by Tag; fall back
+        // to the default Ctrl+Win if the stored value is unrecognised.
+        HotkeyKeyCombo.SelectedIndex = 0;
+        for (int i = 0; i < HotkeyKeyCombo.Items.Count; i++)
+        {
+            if (HotkeyKeyCombo.Items[i] is ComboBoxItem item
+                && string.Equals(item.Tag?.ToString(), _settings.Hotkey, StringComparison.OrdinalIgnoreCase))
+            {
+                HotkeyKeyCombo.SelectedIndex = i;
+                break;
+            }
+        }
+
+        OfferRefinementCheck.IsChecked = _settings.OfferRefinement;
+        KeepWavsCheck.IsChecked = _settings.KeepWavFiles;
     }
 
     private void OnSave_Click(object sender, RoutedEventArgs e)
@@ -66,10 +86,15 @@ public partial class SettingsWindow : Window
         var selectedTag = (HotkeyCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "PushToTalk";
         var mode = selectedTag == "Toggle" ? HotkeyMode.Toggle : HotkeyMode.PushToTalk;
         var maxSec = (int)MaxSlider.Value;
+        var hotkeyTag = (HotkeyKeyCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Ctrl+Win";
+        var hotkeyChanged = !string.Equals(_settings.Hotkey, hotkeyTag, StringComparison.OrdinalIgnoreCase);
 
         _settings.OpenAiApiKey = key;
         _settings.HotkeyMode = mode;
         _settings.MaxRecordingSeconds = maxSec;
+        _settings.Hotkey = hotkeyTag;
+        _settings.OfferRefinement = OfferRefinementCheck.IsChecked == true;
+        _settings.KeepWavFiles = KeepWavsCheck.IsChecked == true;
 
         try
         {
@@ -86,7 +111,9 @@ public partial class SettingsWindow : Window
         try
         {
             _whisper.UpdateApiKey(key);
-            _coordinator.UpdateSettings(mode, maxSec);
+            _refiner.UpdateApiKey(key);
+            _coordinator.UpdateSettings(
+                mode, maxSec, _settings.KeepWavFiles, _settings.OfferRefinement);
             Log.Information("Settings saved and applied live");
         }
         catch (Exception ex)
@@ -94,6 +121,15 @@ public partial class SettingsWindow : Window
             Log.Error(ex, "Failed to apply settings live; restart may be needed");
             ShowError("Saved, but couldn't apply some changes live. Restart WisprClone to be safe.");
             return;
+        }
+
+        if (hotkeyChanged)
+        {
+            MessageBox.Show(
+                "Hotkey saved. Restart WisprClone for the new hotkey to take effect.",
+                "Restart required",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
 
         DialogResult = true;

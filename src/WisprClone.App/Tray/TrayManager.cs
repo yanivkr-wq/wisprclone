@@ -32,16 +32,23 @@ public sealed class TrayManager : IDisposable
     private readonly ClipboardInjector _injector;
     private readonly Action _openSettings;
     private readonly Action _checkForUpdates;
+    private readonly Action _openAbout;
     private readonly TaskbarIcon _icon;
     private readonly MenuItem _recentMenu;
     private readonly MenuItem _autostartMenu;
 
-    public TrayManager(HistoryStore history, ClipboardInjector injector, Action openSettings, Action checkForUpdates)
+    public TrayManager(
+        HistoryStore history,
+        ClipboardInjector injector,
+        Action openSettings,
+        Action checkForUpdates,
+        Action openAbout)
     {
         _history = history;
         _injector = injector;
         _openSettings = openSettings;
         _checkForUpdates = checkForUpdates;
+        _openAbout = openAbout;
 
         _recentMenu = new MenuItem { Header = "Recent dictations" };
         _autostartMenu = new MenuItem
@@ -63,6 +70,9 @@ public sealed class TrayManager : IDisposable
         var updatesItem = new MenuItem { Header = "Check for updates…" };
         updatesItem.Click += (_, _) => _checkForUpdates();
 
+        var aboutItem = new MenuItem { Header = "About WisprClone…" };
+        aboutItem.Click += (_, _) => _openAbout();
+
         var quitItem = new MenuItem { Header = "Quit" };
         quitItem.Click += (_, _) => System.Windows.Application.Current.Shutdown();
 
@@ -73,6 +83,7 @@ public sealed class TrayManager : IDisposable
         menu.Items.Add(settingsItem);
         menu.Items.Add(logsItem);
         menu.Items.Add(updatesItem);
+        menu.Items.Add(aboutItem);
         menu.Items.Add(new Separator());
         menu.Items.Add(quitItem);
 
@@ -175,29 +186,36 @@ public sealed class TrayManager : IDisposable
     }
 
     /// <summary>
-    /// Generates the multi-resolution mic-on-blue-circle .ico on first run,
-    /// caches it next to the app data, and loads it from disk on subsequent
-    /// runs. The icon design lives in IconFactory.
+    /// Loads the tray icon, preferring the .ico file that ships with the app
+    /// (Resources\app.ico, also embedded as the EXE's icon resource). Falls
+    /// back to runtime generation via IconFactory if the shipped file is
+    /// missing (e.g. dev mode without the copy step), then to a system stock
+    /// icon if even that fails.
     /// </summary>
     private static Icon BuildTrayIcon()
     {
-        var iconDir = Path.Combine(
+        // Path 1: the shipped Resources\app.ico next to the EXE.
+        var shippedIconPath = Path.Combine(AppContext.BaseDirectory, "Resources", "app.ico");
+        if (File.Exists(shippedIconPath))
+        {
+            try { return new Icon(shippedIconPath); }
+            catch (Exception ex) { Log.Warning(ex, "Failed to load shipped icon {Path}", shippedIconPath); }
+        }
+
+        // Path 2: regenerate on-the-fly into LOCALAPPDATA.
+        var fallbackDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "WisprClone");
-        Directory.CreateDirectory(iconDir);
-        var iconPath = Path.Combine(iconDir, "tray.ico");
-
+        Directory.CreateDirectory(fallbackDir);
+        var fallbackIconPath = Path.Combine(fallbackDir, "tray.ico");
         try
         {
-            // Always regenerate during development — cheap and avoids stale
-            // icons from older builds sticking around. Could be guarded with
-            // a version check if regeneration cost matters.
-            IconFactory.SaveAsIco(iconPath);
-            return new Icon(iconPath);
+            IconFactory.SaveAsIco(fallbackIconPath);
+            return new Icon(fallbackIconPath);
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Failed to render tray icon to {Path}; falling back to SystemIcons.Application", iconPath);
+            Log.Warning(ex, "Failed to render tray icon; falling back to SystemIcons.Application");
             return SystemIcons.Application;
         }
     }

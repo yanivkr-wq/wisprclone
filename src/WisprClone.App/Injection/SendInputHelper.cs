@@ -13,7 +13,9 @@ internal static class SendInputHelper
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
     private const ushort VK_CONTROL = 0x11;
-    private const ushort VK_V = 0x56;
+    private const ushort VK_SHIFT   = 0x10;
+    private const ushort VK_LEFT    = 0x25;
+    private const ushort VK_V       = 0x56;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct KEYBDINPUT
@@ -80,6 +82,35 @@ internal static class SendInputHelper
         {
             int err = Marshal.GetLastWin32Error();
             throw new InvalidOperationException($"SendInput injected only {sent}/{inputs.Length} events (Win32 error {err}).");
+        }
+    }
+
+    /// <summary>
+    /// Sends Shift+Left N times, selecting the N characters immediately
+    /// behind the caret in the focused field. Used by the refinement panel
+    /// to highlight the previously-pasted dictation so it can be replaced
+    /// with a Ctrl+V of the refined version.
+    /// </summary>
+    public static void SendShiftLeft(int count)
+    {
+        if (count <= 0) return;
+
+        // Build: Shift↓ [Left↓ Left↑]*N Shift↑
+        var inputs = new INPUT[2 + count * 2];
+        int i = 0;
+        inputs[i++] = Key(VK_SHIFT, isUp: false);
+        for (int j = 0; j < count; j++)
+        {
+            inputs[i++] = Key(VK_LEFT, isUp: false);
+            inputs[i++] = Key(VK_LEFT, isUp: true);
+        }
+        inputs[i++] = Key(VK_SHIFT, isUp: true);
+
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        if (sent != inputs.Length)
+        {
+            int err = Marshal.GetLastWin32Error();
+            throw new InvalidOperationException($"SendInput injected only {sent}/{inputs.Length} Shift+Left events (Win32 error {err}).");
         }
     }
 
