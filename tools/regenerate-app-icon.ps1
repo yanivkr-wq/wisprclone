@@ -15,8 +15,8 @@ $root = Split-Path $PSScriptRoot -Parent
 $abs  = Join-Path $root $OutPath
 
 # ---- Brand colours (mirror IconFactory.cs) ----
-$top    = [System.Drawing.Color]::FromArgb(0xFF, 0x3D, 0xDF, 0xAE)
-$bottom = [System.Drawing.Color]::FromArgb(0xFF, 0x1A, 0x9F, 0x7B)
+$top    = [System.Drawing.Color]::FromArgb(0xFF, 0xA0, 0x4D, 0xEA)
+$bottom = [System.Drawing.Color]::FromArgb(0xFF, 0x6A, 0x2D, 0xA8)
 
 function New-MasterBitmap {
     param([int] $size)
