@@ -34,6 +34,16 @@ public partial class RefinementPanel : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
     private const int AutoDismissMs = 8000;
 
     private readonly string _originalText;
@@ -137,28 +147,42 @@ public partial class RefinementPanel : Window
         Log.Information("Refinement {Style}: \"{Refined}\"", style, refined);
 
         // Replace previously-pasted text:
-        //   1) restore focus to the app that received the original paste
-        //      (clicking our button shifted focus to us — we'd send keys to
-        //      ourselves otherwise),
-        //   2) wait a tick for the focus change to settle,
-        //   3) select last N chars in destination app via Shift+Left,
+        //   1) hide our panel so it stops intercepting focus,
+        //   2) force foreground back to the target app (AttachThreadInput
+        //      bypasses Windows' SetForegroundWindow restrictions),
+        //   3) select the just-pasted text: Shift+Left for LTR, Shift+Right
+        //      for RTL text (Hebrew / Arabic — cursor sits at visual-left
+        //      and we must move RIGHT to extend selection into the text),
         //   4) Ctrl+V the refined text (already on clipboard via InjectText).
         try
         {
+            Visibility = Visibility.Hidden;
+            await Task.Delay(50).ConfigureAwait(true);
+
             if (_targetHwnd != IntPtr.Zero)
             {
-                SetForegroundWindow(_targetHwnd);
-                await Task.Delay(60).ConfigureAwait(true);  // let focus actually transfer
+                ForceForeground(_targetHwnd);
+                await Task.Delay(80).ConfigureAwait(true);
             }
 
-            // Drop the trailing space the cleanup pass added so we count chars accurately.
-            var originalLen = _originalText.TrimEnd().Length;
-            SendInputHelper.SendShiftLeft(originalLen);
+            // Use the FULL length (including the trailing space the cleanup
+            // pass added) so we select EVERY character we pasted — otherwise
+            // the first char gets left behind glued to the refined text.
+            var originalLen = _originalText.Length;
+            bool isRtl = IsRtlAtEnd(_originalText);
+
+            Log.Debug("Refine replace: len={Len}, rtl={Rtl}, dir={Dir}",
+                originalLen, isRtl, isRtl ? "Shift+Right" : "Shift+Left");
+
+            if (isRtl)
+                SendInputHelper.SendShiftRight(originalLen);
+            else
+                SendInputHelper.SendShiftLeft(originalLen);
 
             // Tiny pause so the selection registers before Ctrl+V replaces it.
-            await Task.Delay(40).ConfigureAwait(true);
+            await Task.Delay(50).ConfigureAwait(true);
 
-            // Add a single trailing space to refined too, to match dictation style.
+            // Single trailing space to match the cleanup convention.
             var refinedWithSpace = refined.TrimEnd() + " ";
             _injector.InjectText(refinedWithSpace);
         }
@@ -168,6 +192,53 @@ public partial class RefinementPanel : Window
         }
 
         Close();
+    }
+
+    /// <summary>
+    /// True when the text (ignoring trailing whitespace) ends with a Hebrew /
+    /// Arabic / Syriac character — meaning the caret after paste is at the
+    /// visual-left of the text and we need Shift+Right (not Shift+Left) to
+    /// select backwards into it.
+    /// </summary>
+    private static bool IsRtlAtEnd(string text)
+    {
+        for (int i = text.Length - 1; i >= 0; i--)
+        {
+            char c = text[i];
+            if (char.IsWhiteSpace(c)) continue;
+            return (c >= 0x0590 && c <= 0x05FF)    // Hebrew
+                || (c >= 0x0600 && c <= 0x06FF)    // Arabic
+                || (c >= 0x0700 && c <= 0x074F);   // Syriac
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Reliable foreground-window switch. SetForegroundWindow alone is
+    /// restricted by Windows when the calling thread isn't the foreground
+    /// owner; attaching our input queue to both the current foreground and
+    /// the target thread lifts that restriction.
+    /// </summary>
+    private static void ForceForeground(IntPtr hwnd)
+    {
+        try
+        {
+            var fore = GetForegroundWindow();
+            uint foreThread = GetWindowThreadProcessId(fore, out _);
+            uint targetThread = GetWindowThreadProcessId(hwnd, out _);
+            uint ourThread = GetCurrentThreadId();
+
+            bool a1 = foreThread != ourThread   && AttachThreadInput(ourThread, foreThread,   true);
+            bool a2 = targetThread != ourThread && AttachThreadInput(ourThread, targetThread, true);
+            SetForegroundWindow(hwnd);
+            if (a2) AttachThreadInput(ourThread, targetThread, false);
+            if (a1) AttachThreadInput(ourThread, foreThread,   false);
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "ForceForeground failed; falling back to plain SetForegroundWindow");
+            SetForegroundWindow(hwnd);
+        }
     }
 
     private void SetBusy(string message)
