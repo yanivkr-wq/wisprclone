@@ -82,12 +82,16 @@ Write-Host "  Installer: $setupExe ($setupSizeMb MB)" -ForegroundColor Green
 # --- 3. Optional: upload to GitHub Releases ---
 if ($Publish) {
     if (-not $RepoUrl) {
-        $ghCmd0 = Get-Command gh -ErrorAction SilentlyContinue
-        if ($ghCmd0) { $ghProbe = $ghCmd0.Source } else { $ghProbe = "C:\Program Files\GitHub CLI\gh.exe" }
-        if (-not (Test-Path $ghProbe)) { throw "gh CLI not found. Install: winget install GitHub.cli" }
-        $repoNwo = (& $ghProbe repo view --json nameWithOwner --jq .nameWithOwner) 2>$null
-        if (-not $repoNwo) { throw "Could not detect GitHub repo. Pass -RepoUrl or run from within a gh-detected repo." }
-        $RepoUrl = "https://github.com/$repoNwo"
+        # Read the GitHub remote of the script's repo (NOT the current working
+        # dir — when this script is invoked from a different worktree the
+        # auto-detect would land on the wrong repo).
+        $remote = & git -C $root remote get-url origin 2>$null
+        if ($remote -and $remote -match "github\.com[/:]([^/]+)/([^/]+?)(?:\.git)?\s*$") {
+            $RepoUrl = "https://github.com/$($Matches[1])/$($Matches[2])"
+        }
+        else {
+            throw "Could not detect GitHub repo from origin remote at $root. Pass -RepoUrl explicitly."
+        }
     }
 
     # vpk's own upload tries to spawn powershell internally, which the Claude
