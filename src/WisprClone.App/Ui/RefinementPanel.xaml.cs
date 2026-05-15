@@ -147,43 +147,40 @@ public partial class RefinementPanel : Window
 
         Log.Information("Refinement {Style}: \"{Refined}\"", style, refined);
 
-        // Replace previously-pasted text:
-        //   1) hide our panel so it stops intercepting focus,
-        //   2) force foreground back to the target app (AttachThreadInput
-        //      bypasses Windows' SetForegroundWindow restrictions),
-        //   3) select the just-pasted text: Shift+Left for LTR, Shift+Right
-        //      for RTL text (Hebrew / Arabic — cursor sits at visual-left
-        //      and we must move RIGHT to extend selection into the text),
+        // Replace previously-pasted text using Backspace + Ctrl+V:
+        //   1) push the target app back to foreground (clicking our button
+        //      moved focus to us; SetForegroundWindow is allowed because the
+        //      user just interacted with our process),
+        //   2) wait generously for focus to actually transfer,
+        //   3) Backspace × N: deletes the N chars before the cursor in LOGICAL
+        //      order — works identically for LTR, RTL, mixed scripts. We
+        //      previously tried Shift+Left + Ctrl+V but that depends on visual
+        //      vs. logical selection conventions that varied per app and was
+        //      brittle on focus changes,
         //   4) Ctrl+V the refined text (already on clipboard via InjectText).
         try
         {
-            Visibility = Visibility.Hidden;
-            await Task.Delay(50).ConfigureAwait(true);
+            var foregroundBefore = GetForegroundWindow();
 
             if (_targetHwnd != IntPtr.Zero)
             {
-                ForceForeground(_targetHwnd);
-                await Task.Delay(80).ConfigureAwait(true);
+                SetForegroundWindow(_targetHwnd);
+                await Task.Delay(180).ConfigureAwait(true);  // generous, prefers reliability over speed
             }
 
-            // Use the FULL length (including the trailing space the cleanup
-            // pass added) so we select EVERY character we pasted — otherwise
-            // the first char gets left behind glued to the refined text.
+            var foregroundAfter = GetForegroundWindow();
             var originalLen = _originalText.Length;
-            bool isRtl = ContainsRtl(_originalText);
+            Log.Information(
+                "Refine replace: target=0x{T:X} foregroundBefore=0x{Before:X} foregroundAfter=0x{After:X} deleting {Len} chars",
+                _targetHwnd.ToInt64(), foregroundBefore.ToInt64(), foregroundAfter.ToInt64(), originalLen);
 
-            Log.Debug("Refine replace: len={Len}, rtl={Rtl}, dir={Dir}",
-                originalLen, isRtl, isRtl ? "Shift+Right" : "Shift+Left");
+            // Delete the previously-pasted text via Backspace × N.
+            SendInputHelper.SendBackspace(originalLen);
 
-            if (isRtl)
-                SendInputHelper.SendShiftRight(originalLen);
-            else
-                SendInputHelper.SendShiftLeft(originalLen);
+            // Wait for the deletes to register before pasting on top.
+            await Task.Delay(80).ConfigureAwait(true);
 
-            // Tiny pause so the selection registers before Ctrl+V replaces it.
-            await Task.Delay(50).ConfigureAwait(true);
-
-            // Single trailing space to match the cleanup convention.
+            // Paste refined (single trailing space to match the cleanup convention).
             var refinedWithSpace = refined.TrimEnd() + " ";
             _injector.InjectText(refinedWithSpace);
         }

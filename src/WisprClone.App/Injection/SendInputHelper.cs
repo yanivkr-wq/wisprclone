@@ -16,6 +16,7 @@ internal static class SendInputHelper
     private const ushort VK_SHIFT   = 0x10;
     private const ushort VK_LEFT    = 0x25;
     private const ushort VK_V       = 0x56;
+    private const ushort VK_BACK    = 0x08;
 
     [StructLayout(LayoutKind.Sequential)]
     private struct KEYBDINPUT
@@ -97,6 +98,32 @@ internal static class SendInputHelper
     /// move it into empty space. Shift+Right selects backwards into the text.
     /// </summary>
     public static void SendShiftRight(int count) => SendShiftArrow(count, VK_RIGHT);
+
+    /// <summary>
+    /// Sends Backspace N times. Always deletes the character immediately
+    /// before the caret in LOGICAL order — works identically for LTR, RTL,
+    /// and mixed scripts. Used by the refinement panel as a robust
+    /// alternative to Shift-select + paste when focus restoration is shaky.
+    /// </summary>
+    public static void SendBackspace(int count)
+    {
+        if (count <= 0) return;
+
+        var inputs = new INPUT[count * 2];
+        int i = 0;
+        for (int j = 0; j < count; j++)
+        {
+            inputs[i++] = Key(VK_BACK, isUp: false);
+            inputs[i++] = Key(VK_BACK, isUp: true);
+        }
+
+        var sent = SendInput((uint)inputs.Length, inputs, Marshal.SizeOf<INPUT>());
+        if (sent != inputs.Length)
+        {
+            int err = Marshal.GetLastWin32Error();
+            throw new InvalidOperationException($"SendInput injected only {sent}/{inputs.Length} Backspace events (Win32 error {err}).");
+        }
+    }
 
     private const ushort VK_RIGHT = 0x27;
 
