@@ -79,14 +79,12 @@ public partial class TranslationPanel : Window
         {
             Log.Warning(ex, "Translate: failed to set clipboard");
         }
-        DialogResult = true;
         Close();
     }
 
     private void OnKeep_Click(object sender, RoutedEventArgs e)
     {
         Log.Information("Translate: user kept original, clipboard untouched");
-        DialogResult = false;
         Close();
     }
 

@@ -60,6 +60,18 @@ internal static class Program
             ShutdownMode = ShutdownMode.OnExplicitShutdown
         };
 
+        // Safety net: any unhandled exception that escapes a WPF UI handler
+        // would normally terminate the whole app. We log it and mark
+        // Handled=true so the tray icon + dictation pipeline stay alive.
+        // (v0.3.2 crashed when TranslationPanel set DialogResult on a
+        // non-modal window. With this in place, the next equivalent bug
+        // just logs an error instead of killing the app.)
+        app.DispatcherUnhandledException += (s, e) =>
+        {
+            Log.Error(e.Exception, "Unhandled UI exception — keeping app alive");
+            e.Handled = true;
+        };
+
         // Defer construction of the rest of the app until the WPF dispatcher
         // is running. That lets us pop the WelcomeWindow as a real WPF dialog
         // if we need an API key from the user.
