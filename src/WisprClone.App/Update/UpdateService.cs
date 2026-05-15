@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
@@ -23,6 +24,7 @@ public sealed class UpdateService : IDisposable
 {
     private readonly string _feedUrl;
     private readonly System.Threading.Timer _timer;
+    private int _inFlight;
 
     /// <summary>Fires when a new version has been downloaded and is queued for apply.</summary>
     public event Action<string>? UpdateDownloaded;
@@ -31,16 +33,69 @@ public sealed class UpdateService : IDisposable
     {
         _feedUrl = feedUrl ?? string.Empty;
 
+        // Clear any stale Velopack lock left behind by a previous crashed
+        // process. The lock is a file at %LocalAppData%\WisprClone\packages\
+        // .velopack_lock — if our process owns the binary now, no other
+        // legitimate Velopack process is holding it.
+        ClearStaleLock();
+
         // Wait 30 s after startup to let the app settle, then every 4 hours.
         _timer = new System.Threading.Timer(
-            _ => _ = CheckAsync(silent: true),
+            _ => _ = CheckGuarded(silent: true),
             null,
             TimeSpan.FromSeconds(30),
             TimeSpan.FromHours(4));
     }
 
+    private static void ClearStaleLock()
+    {
+        try
+        {
+            var lockPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "WisprClone", "packages", ".velopack_lock");
+            if (File.Exists(lockPath))
+            {
+                File.Delete(lockPath);
+                Log.Information("Cleared stale Velopack lock at startup: {Path}", lockPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Couldn't clear stale Velopack lock (non-fatal)");
+        }
+    }
+
     /// <summary>User-triggered check (e.g. from the tray menu). Logs verbosely.</summary>
-    public Task<UpdateCheckResult> CheckNowAsync() => CheckAsync(silent: false);
+    public Task<UpdateCheckResult> CheckNowAsync() => CheckGuarded(silent: false);
+
+    /// <summary>
+    /// Wrapper around CheckAsync that enforces a single-flight semantic:
+    /// only one update check can be in progress at a time. Without this,
+    /// overlapping checks (e.g. user clicks Check for Updates twice while
+    /// the first is still downloading) fight for Velopack's
+    /// .velopack_lock file and the second crashes with
+    /// AcquireLockFailedException.
+    /// </summary>
+    private async Task<UpdateCheckResult> CheckGuarded(bool silent)
+    {
+        if (Interlocked.CompareExchange(ref _inFlight, 1, 0) != 0)
+        {
+            if (!silent)
+                Log.Information("Update check already in progress — ignoring duplicate request");
+            else
+                Log.Debug("Periodic update check skipped (another check is in flight)");
+            return UpdateCheckResult.AlreadyRunning;
+        }
+        try
+        {
+            return await CheckAsync(silent).ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _inFlight, 0);
+        }
+    }
 
     private async Task<UpdateCheckResult> CheckAsync(bool silent)
     {
@@ -104,5 +159,6 @@ public enum UpdateCheckResult
     NotInstalled,
     UpToDate,
     DownloadedReady,
-    Failed
+    Failed,
+    AlreadyRunning
 }

@@ -264,7 +264,7 @@ internal static class Program
 
         // Hook callback runs on the WPF dispatcher (STA) which is required
         // for clipboard access. Still wrap defensively.
-        Application.Current?.Dispatcher.BeginInvoke(new Action(async () =>
+        Application.Current?.Dispatcher.BeginInvoke(new Action(() =>
         {
             string clipboardText;
             try
@@ -292,29 +292,17 @@ internal static class Program
 
             try
             {
-                _tray.ShowBalloon("WisprClone — Translate", "Translating…");
-                var result = await _translator.TranslateAsync(clipboardText, _settings.TranslateTarget)
-                    .ConfigureAwait(true);
-
-                if (string.IsNullOrWhiteSpace(result.Text))
-                {
-                    _tray.ShowBalloon("WisprClone — Translate", "Translation came back empty.");
-                    return;
-                }
-
-                System.Windows.Clipboard.SetDataObject(result.Text, copy: true);
-                Log.Information("Translate {From}→{To}: \"{Text}\"", result.SourceHint, result.TargetLanguage, result.Text);
-                UsageTracker.RecordTranslate(clipboardText, result.Text);
-
-                var preview = result.Text.Length > 80 ? result.Text[..77] + "…" : result.Text;
-                _tray.ShowBalloon(
-                    $"Translated to {result.TargetLanguage}",
-                    $"{preview}\n\nReady to paste with Ctrl+V.");
+                // Pop the translation panel. It runs the actual OpenAI call,
+                // shows original + translation side-by-side, and only writes
+                // back to clipboard if the user explicitly clicks "Use".
+                var panel = new TranslationPanel(clipboardText, _translator, _settings.TranslateTarget);
+                panel.Show();
+                panel.Activate();
             }
             catch (Exception ex)
             {
-                Log.Error(ex, "Translate failed");
-                _tray.ShowBalloon("WisprClone — Translate", "Translation failed. See log for details.");
+                Log.Error(ex, "Translate panel failed to open");
+                _tray.ShowBalloon("WisprClone — Translate", "Couldn't open the translate panel. See log.");
             }
         }));
     }
@@ -330,6 +318,7 @@ internal static class Program
             UpdateCheckResult.NotInstalled    => "This build wasn't installed via Velopack, so updates can't be applied automatically. Reinstall using a vpk-packaged installer to enable.",
             UpdateCheckResult.UpToDate        => "WisprClone is up to date.",
             UpdateCheckResult.DownloadedReady => "A new version was downloaded and will be applied the next time WisprClone starts.",
+            UpdateCheckResult.AlreadyRunning  => "An update check is already in progress. Wait a few seconds and try again.",
             UpdateCheckResult.Failed          => "Update check failed. See the log for details.",
             _ => "Update check completed."
         };
