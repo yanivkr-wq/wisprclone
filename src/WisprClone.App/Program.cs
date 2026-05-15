@@ -175,7 +175,7 @@ internal static class Program
             {
                 try
                 {
-                    var win = new SettingsWindow(settingsRef, settingsPath, _whisper!, _refiner!, _translator!, _coordinator!);
+                    var win = new SettingsWindow(settingsRef, settingsPath, _whisper!, _refiner!, _translator!, _coordinator!, _hook!);
                     // No Owner — the app has no main window (tray-only), and
                     // assigning Application.Current.MainWindow can throw when
                     // it's null.

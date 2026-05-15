@@ -21,6 +21,7 @@ public partial class SettingsWindow : Window
     private readonly RefinementService _refiner;
     private readonly TranslationService _translator;
     private readonly DictationCoordinator _coordinator;
+    private readonly LowLevelKeyboardHook _hook;
 
     public SettingsWindow(
         AppSettings settings,
@@ -28,7 +29,8 @@ public partial class SettingsWindow : Window
         WhisperEngine whisper,
         RefinementService refiner,
         TranslationService translator,
-        DictationCoordinator coordinator)
+        DictationCoordinator coordinator,
+        LowLevelKeyboardHook hook)
     {
         InitializeComponent();
 
@@ -38,6 +40,7 @@ public partial class SettingsWindow : Window
         _refiner = refiner;
         _translator = translator;
         _coordinator = coordinator;
+        _hook = hook;
 
         PopulateFromSettings();
     }
@@ -61,9 +64,26 @@ public partial class SettingsWindow : Window
 
         OfferRefinementCheck.IsChecked = _settings.OfferRefinement;
         KeepWavsCheck.IsChecked = _settings.KeepWavFiles;
+
+        // Translate hotkey
+        _stagedTranslateHotkey = HotkeySpec.Parse(_settings.TranslateHotkey);
+        TranslateHotkeyDisplay.Text = _stagedTranslateHotkey.DisplayName;
+
+        // Translate target language
+        TranslateTargetCombo.SelectedIndex = 0;  // default: auto
+        for (int i = 0; i < TranslateTargetCombo.Items.Count; i++)
+        {
+            if (TranslateTargetCombo.Items[i] is ComboBoxItem item
+                && string.Equals(item.Tag?.ToString(), _settings.TranslateTarget, StringComparison.OrdinalIgnoreCase))
+            {
+                TranslateTargetCombo.SelectedIndex = i;
+                break;
+            }
+        }
     }
 
     private HotkeySpec _stagedHotkey = HotkeySpec.Default;
+    private HotkeySpec _stagedTranslateHotkey = HotkeySpec.Parse("Alt+Shift+T");
 
     private void OnChangeHotkey_Click(object sender, RoutedEventArgs e)
     {
@@ -72,6 +92,16 @@ public partial class SettingsWindow : Window
         {
             _stagedHotkey = dlg.Captured;
             HotkeyDisplay.Text = _stagedHotkey.DisplayName;
+        }
+    }
+
+    private void OnChangeTranslateHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new HotkeyCaptureDialog(_stagedTranslateHotkey) { Owner = this };
+        if (dlg.ShowDialog() == true && dlg.Captured != null)
+        {
+            _stagedTranslateHotkey = dlg.Captured;
+            TranslateHotkeyDisplay.Text = _stagedTranslateHotkey.DisplayName;
         }
     }
 
@@ -95,12 +125,17 @@ public partial class SettingsWindow : Window
         var hotkeyTag = _stagedHotkey.ToStorageString();
         var hotkeyChanged = !string.Equals(_settings.Hotkey, hotkeyTag, StringComparison.OrdinalIgnoreCase);
 
+        var translateTarget = (TranslateTargetCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "auto";
+        var translateHotkeyTag = _stagedTranslateHotkey.ToStorageString();
+
         _settings.OpenAiApiKey = key;
         _settings.HotkeyMode = mode;
         _settings.MaxRecordingSeconds = maxSec;
         _settings.Hotkey = hotkeyTag;
         _settings.OfferRefinement = OfferRefinementCheck.IsChecked == true;
         _settings.KeepWavFiles = KeepWavsCheck.IsChecked == true;
+        _settings.TranslateHotkey = translateHotkeyTag;
+        _settings.TranslateTarget = translateTarget;
 
         try
         {
@@ -121,6 +156,11 @@ public partial class SettingsWindow : Window
             _translator.UpdateApiKey(key);
             _coordinator.UpdateSettings(
                 mode, maxSec, _settings.KeepWavFiles, _settings.OfferRefinement);
+
+            // Translate hotkey can be applied live: the hook supports
+            // swapping the translate spec at runtime.
+            _hook.UpdateTranslateSpec(_stagedTranslateHotkey);
+
             Log.Information("Settings saved and applied live");
         }
         catch (Exception ex)
