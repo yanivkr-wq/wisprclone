@@ -32,3 +32,6 @@ packages/
 
 # Inno Setup compile output (~50 MB installer, don't commit)
 installer/Output/
+
+# Velopack release artifacts (large; live on GitHub Releases instead)
+releases/
