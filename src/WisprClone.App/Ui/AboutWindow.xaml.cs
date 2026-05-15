@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using Serilog;
+using WisprClone.App.Tracking;
 
 namespace WisprClone.App.Ui;
 
@@ -32,6 +33,37 @@ public partial class AboutWindow : Window
             {
                 Log.Debug(ex, "About: couldn't load app icon");
             }
+        }
+
+        PopulateUsage();
+    }
+
+    private void PopulateUsage()
+    {
+        try
+        {
+            var s = UsageTracker.GetSummary();
+
+            UsageTodayText.Text =
+                $"Today: {s.TodayTranscriptions} dictations ({s.TodayAudioMin:F1} min), " +
+                $"{s.TodayRefines} refinements, {s.TodayTranslates} translations — " +
+                $"~${s.TodayCostUsd:F3}";
+
+            UsageMonthText.Text =
+                $"This month: {s.MonthTranscriptions} dictations ({s.MonthAudioMin:F1} min), " +
+                $"{s.MonthRefines} refinements, {s.MonthTranslates} translations — " +
+                $"~${s.MonthCostUsd:F2}";
+
+            UsageLifetimeText.Text =
+                $"Lifetime: {s.LifetimeTranscriptions} dictations ({s.LifetimeAudioMin:F1} min) — " +
+                $"~${s.LifetimeCostUsd:F2}";
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "Couldn't populate usage stats in About");
+            UsageTodayText.Text = "(usage data unavailable)";
+            UsageMonthText.Text = "";
+            UsageLifetimeText.Text = "";
         }
     }
 

@@ -7,6 +7,7 @@ using System.Windows.Threading;
 using Serilog;
 using WisprClone.App.Injection;
 using WisprClone.App.Refinement;
+using WisprClone.App.Tracking;
 
 namespace WisprClone.App.Ui;
 
@@ -146,6 +147,7 @@ public partial class RefinementPanel : Window
         }
 
         Log.Information("Refinement {Style}: \"{Refined}\"", style, refined);
+        UsageTracker.RecordRefine(_originalText, refined);
 
         // Replace previously-pasted text using Backspace + Ctrl+V:
         //   1) push the target app back to foreground (clicking our button

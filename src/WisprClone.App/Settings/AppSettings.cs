@@ -54,6 +54,21 @@ public sealed class AppSettings
     public string RefinementModel { get; set; } = "gpt-4o-mini";
 
     /// <summary>
+    /// Hotkey that triggers translate-from-clipboard. Read the same way as
+    /// <see cref="Hotkey"/> — e.g. "Alt+Shift+T", "Ctrl+Shift+T", "F12".
+    /// Default: Alt+Shift+T (4-key chord, unlikely to conflict).
+    /// Set to empty string to disable the feature.
+    /// </summary>
+    public string TranslateHotkey { get; set; } = "Alt+Shift+T";
+
+    /// <summary>
+    /// Target language for translation. "auto" flips between Hebrew and
+    /// English based on the input. Otherwise an explicit language name —
+    /// "Hebrew", "English", "Spanish", "Arabic", "French", "German", …
+    /// </summary>
+    public string TranslateTarget { get; set; } = "auto";
+
+    /// <summary>
     /// Resolves the settings file at %APPDATA%\WisprClone\settings.json. Creates
     /// it with a placeholder API key on first run so the user has something to
     /// edit.

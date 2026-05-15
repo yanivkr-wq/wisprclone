@@ -29,11 +29,20 @@ public sealed class LowLevelKeyboardHook : IDisposable
 
     private readonly HashSet<int> _pressed = new();
     private bool _chordActive;
+    private bool _translateActive;
 
     private HotkeySpec _spec;
+    private HotkeySpec? _translateSpec;
 
     public event Action? ChordPressed;
     public event Action? ChordReleased;
+
+    /// <summary>
+    /// Fires once each time the configured translate hotkey transitions from
+    /// not-pressed to pressed. Won't re-fire while held — user has to
+    /// release and re-press.
+    /// </summary>
+    public event Action? TranslateTriggered;
 
     /// <summary>
     /// When true and the active hotkey is Ctrl+Win, the hook swallows
@@ -92,7 +101,34 @@ public sealed class LowLevelKeyboardHook : IDisposable
         }
 
         UpdateChordState();
+        UpdateTranslateState();
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
+    }
+
+    private void UpdateTranslateState()
+    {
+        if (_translateSpec == null) { _translateActive = false; return; }
+
+        bool active = _translateSpec.Matches(_pressed);
+        if (active && !_translateActive)
+        {
+            _translateActive = true;
+            SafeRaise(TranslateTriggered);
+        }
+        else if (!active && _translateActive)
+        {
+            _translateActive = false;
+        }
+    }
+
+    /// <summary>
+    /// Replace the translate hotkey at runtime. Pass null (or a spec where
+    /// every modifier is false and Key is null) to disable translate.
+    /// </summary>
+    public void UpdateTranslateSpec(HotkeySpec? spec)
+    {
+        _translateSpec = spec;
+        _translateActive = false;
     }
 
     private static bool IsCtrlWinChord(HotkeySpec spec) =>

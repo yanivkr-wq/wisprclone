@@ -220,6 +220,25 @@ public sealed class TrayManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Show a Windows balloon / Action Center notification from the tray icon.
+    /// Marshals to the WPF dispatcher because Hardcodet expects that.
+    /// </summary>
+    public void ShowBalloon(string title, string message)
+    {
+        try
+        {
+            _icon.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _icon.ShowBalloonTip(title, message, BalloonIcon.Info);
+            }));
+        }
+        catch (Exception ex)
+        {
+            Log.Debug(ex, "ShowBalloon failed (non-fatal)");
+        }
+    }
+
     public void Dispose()
     {
         _icon.Dispose();

@@ -10,6 +10,7 @@ using WisprClone.App.Hotkey;
 using WisprClone.App.Injection;
 using WisprClone.App.PostProcess;
 using WisprClone.App.Refinement;
+using WisprClone.App.Tracking;
 using WisprClone.App.Transcription;
 using WisprClone.App.Ui;
 
@@ -179,6 +180,9 @@ public sealed class DictationCoordinator : IDisposable
         }
 
         sw.Stop();
+
+        // Successful transcription — log to the usage tracker.
+        UsageTracker.RecordWhisper(recordedFor.TotalSeconds);
 
         var cleaned = Cleanup.Apply(text);
 

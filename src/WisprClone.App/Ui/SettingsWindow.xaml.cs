@@ -9,6 +9,7 @@ using WisprClone.App.Pipeline;
 using WisprClone.App.Refinement;
 using WisprClone.App.Settings;
 using WisprClone.App.Transcription;
+using WisprClone.App.Translation;
 
 namespace WisprClone.App.Ui;
 
@@ -18,6 +19,7 @@ public partial class SettingsWindow : Window
     private readonly string _settingsPath;
     private readonly WhisperEngine _whisper;
     private readonly RefinementService _refiner;
+    private readonly TranslationService _translator;
     private readonly DictationCoordinator _coordinator;
 
     public SettingsWindow(
@@ -25,6 +27,7 @@ public partial class SettingsWindow : Window
         string settingsPath,
         WhisperEngine whisper,
         RefinementService refiner,
+        TranslationService translator,
         DictationCoordinator coordinator)
     {
         InitializeComponent();
@@ -33,6 +36,7 @@ public partial class SettingsWindow : Window
         _settingsPath = settingsPath;
         _whisper = whisper;
         _refiner = refiner;
+        _translator = translator;
         _coordinator = coordinator;
 
         PopulateFromSettings();
@@ -114,6 +118,7 @@ public partial class SettingsWindow : Window
         {
             _whisper.UpdateApiKey(key);
             _refiner.UpdateApiKey(key);
+            _translator.UpdateApiKey(key);
             _coordinator.UpdateSettings(
                 mode, maxSec, _settings.KeepWavFiles, _settings.OfferRefinement);
             Log.Information("Settings saved and applied live");

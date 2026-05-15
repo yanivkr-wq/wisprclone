@@ -11,7 +11,9 @@ using WisprClone.App.Injection;
 using WisprClone.App.Pipeline;
 using WisprClone.App.Refinement;
 using WisprClone.App.Settings;
+using WisprClone.App.Tracking;
 using WisprClone.App.Transcription;
+using WisprClone.App.Translation;
 using WisprClone.App.Tray;
 using WisprClone.App.Ui;
 using WisprClone.App.Update;
@@ -35,6 +37,8 @@ internal static class Program
     private static FloatingPill? _pill;
     private static UpdateService? _updates;
     private static RefinementService? _refiner;
+    private static TranslationService? _translator;
+    private static AppSettings? _settings;
 
     [STAThread]
     private static int Main()
@@ -97,6 +101,7 @@ internal static class Program
             _mic?.Dispose();
             _whisper?.Dispose();
             _refiner?.Dispose();
+            _translator?.Dispose();
             Log.Information("WisprClone exited (code {Code})", exitCode);
             Log.CloseAndFlush();
         }
@@ -119,12 +124,28 @@ internal static class Program
         // Sweep stale wav debug files from previous runs.
         Audio.WavJanitor.PruneOlderThanRetention();
 
+        // Initialise the usage tracker (loads usage.json from %APPDATA%).
+        UsageTracker.Initialize();
+
+        _settings = settings;
         _whisper = new WhisperEngine(apiKey);
         _refiner = new RefinementService(apiKey, settings.RefinementModel);
+        _translator = new TranslationService(apiKey);
 
         var hotkeySpec = HotkeySpec.Parse(settings.Hotkey);
-        Log.Information("Hotkey: {Hotkey}", hotkeySpec.DisplayName);
+        Log.Information("Dictation hotkey: {Hotkey}", hotkeySpec.DisplayName);
         _hook = new LowLevelKeyboardHook(hotkeySpec);
+
+        // Translate hotkey is optional (empty string disables it).
+        if (!string.IsNullOrWhiteSpace(settings.TranslateHotkey))
+        {
+            var translateSpec = HotkeySpec.Parse(settings.TranslateHotkey);
+            Log.Information("Translate hotkey: {Hotkey} (target: {Target})",
+                translateSpec.DisplayName, settings.TranslateTarget);
+            _hook.UpdateTranslateSpec(translateSpec);
+            _hook.TranslateTriggered += OnTranslateTriggered;
+        }
+
         _mic = new MicCapture();
         _coordinator = new DictationCoordinator(
             _hook, _mic, _whisper,
@@ -154,7 +175,7 @@ internal static class Program
             {
                 try
                 {
-                    var win = new SettingsWindow(settingsRef, settingsPath, _whisper!, _refiner!, _coordinator!);
+                    var win = new SettingsWindow(settingsRef, settingsPath, _whisper!, _refiner!, _translator!, _coordinator!);
                     // No Owner — the app has no main window (tray-only), and
                     // assigning Application.Current.MainWindow can throw when
                     // it's null.
@@ -231,6 +252,72 @@ internal static class Program
     private static bool IsRealKey(string? key) =>
         !string.IsNullOrWhiteSpace(key)
         && !key.Contains("REPLACE-WITH-YOUR-OPENAI-KEY", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// User pressed the translate hotkey. Read clipboard → translate via
+    /// OpenAI → put translation BACK on the clipboard (replacing the original)
+    /// → toast the user so they know it's ready to paste.
+    /// </summary>
+    private static void OnTranslateTriggered()
+    {
+        if (_translator == null || _settings == null || _tray == null) return;
+
+        // Hook callback runs on the WPF dispatcher (STA) which is required
+        // for clipboard access. Still wrap defensively.
+        Application.Current?.Dispatcher.BeginInvoke(new Action(async () =>
+        {
+            string clipboardText;
+            try
+            {
+                if (!System.Windows.Clipboard.ContainsText())
+                {
+                    _tray.ShowBalloon("WisprClone — Translate",
+                        "Clipboard has no text. Copy something first, then press the hotkey again.");
+                    return;
+                }
+                clipboardText = System.Windows.Clipboard.GetText() ?? "";
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Translate: couldn't read clipboard");
+                _tray.ShowBalloon("WisprClone — Translate", "Couldn't read the clipboard. See log.");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(clipboardText))
+            {
+                _tray.ShowBalloon("WisprClone — Translate", "Clipboard is empty.");
+                return;
+            }
+
+            try
+            {
+                _tray.ShowBalloon("WisprClone — Translate", "Translating…");
+                var result = await _translator.TranslateAsync(clipboardText, _settings.TranslateTarget)
+                    .ConfigureAwait(true);
+
+                if (string.IsNullOrWhiteSpace(result.Text))
+                {
+                    _tray.ShowBalloon("WisprClone — Translate", "Translation came back empty.");
+                    return;
+                }
+
+                System.Windows.Clipboard.SetDataObject(result.Text, copy: true);
+                Log.Information("Translate {From}→{To}: \"{Text}\"", result.SourceHint, result.TargetLanguage, result.Text);
+                UsageTracker.RecordTranslate(clipboardText, result.Text);
+
+                var preview = result.Text.Length > 80 ? result.Text[..77] + "…" : result.Text;
+                _tray.ShowBalloon(
+                    $"Translated to {result.TargetLanguage}",
+                    $"{preview}\n\nReady to paste with Ctrl+V.");
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Translate failed");
+                _tray.ShowBalloon("WisprClone — Translate", "Translation failed. See log for details.");
+            }
+        }));
+    }
 
     private static async System.Threading.Tasks.Task HandleCheckForUpdatesAsync()
     {
