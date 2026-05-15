@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Serilog;
 using Velopack;
+using Velopack.Sources;
 
 namespace WisprClone.App.Update;
 
@@ -51,7 +52,16 @@ public sealed class UpdateService : IDisposable
 
         try
         {
-            var mgr = new UpdateManager(_feedUrl);
+            // Velopack's plain-URL constructor treats the feed as a generic
+            // SimpleWebSource and looks for /RELEASES at that path — which
+            // 404s on github.com. For GitHub Releases we must use GithubSource
+            // explicitly so Velopack queries the GH API and resolves the
+            // *-Setup.exe / *.nupkg assets attached to the latest release.
+            IUpdateSource source = _feedUrl.Contains("github.com", StringComparison.OrdinalIgnoreCase)
+                ? new GithubSource(_feedUrl, accessToken: null, prerelease: false)
+                : new SimpleWebSource(_feedUrl);
+
+            var mgr = new UpdateManager(source);
 
             if (!mgr.IsInstalled)
             {

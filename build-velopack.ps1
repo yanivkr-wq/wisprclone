@@ -34,8 +34,8 @@ if (-not $Version) {
 Write-Host "===  Building WisprClone v$Version" -ForegroundColor Cyan
 
 # --- Resolve dotnet ---
-$dotnet = Get-Command dotnet -ErrorAction SilentlyContinue
-if (-not $dotnet) { $dotnet = "C:\Program Files\dotnet\dotnet.exe" }
+$dotnetCmd = Get-Command dotnet -ErrorAction SilentlyContinue
+if ($dotnetCmd) { $dotnet = $dotnetCmd.Source } else { $dotnet = "C:\Program Files\dotnet\dotnet.exe" }
 if (-not (Test-Path $dotnet)) { throw "dotnet not found. Install .NET 8 SDK: winget install Microsoft.DotNet.SDK.8" }
 
 # --- Resolve vpk ---
@@ -82,10 +82,10 @@ Write-Host "  Installer: $setupExe ($setupSizeMb MB)" -ForegroundColor Green
 # --- 3. Optional: upload to GitHub Releases ---
 if ($Publish) {
     if (-not $RepoUrl) {
-        $gh = Get-Command gh -ErrorAction SilentlyContinue
-        if (-not $gh) { $gh = "C:\Program Files\GitHub CLI\gh.exe" }
-        if (-not (Test-Path $gh)) { throw "gh CLI not found. Install: winget install GitHub.cli" }
-        $repoNwo = (& $gh repo view --json nameWithOwner --jq .nameWithOwner) 2>$null
+        $ghCmd0 = Get-Command gh -ErrorAction SilentlyContinue
+        if ($ghCmd0) { $ghProbe = $ghCmd0.Source } else { $ghProbe = "C:\Program Files\GitHub CLI\gh.exe" }
+        if (-not (Test-Path $ghProbe)) { throw "gh CLI not found. Install: winget install GitHub.cli" }
+        $repoNwo = (& $ghProbe repo view --json nameWithOwner --jq .nameWithOwner) 2>$null
         if (-not $repoNwo) { throw "Could not detect GitHub repo. Pass -RepoUrl or run from within a gh-detected repo." }
         $RepoUrl = "https://github.com/$repoNwo"
     }
@@ -93,8 +93,8 @@ if ($Publish) {
     # vpk's own upload tries to spawn powershell internally, which the Claude
     # sandbox blocks. Use gh CLI directly — same effect: artifacts uploaded to
     # a GitHub Release at the requested tag.
-    $gh = Get-Command gh -ErrorAction SilentlyContinue
-    if (-not $gh) { $gh = "C:\Program Files\GitHub CLI\gh.exe" }
+    $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
+    if ($ghCmd) { $gh = $ghCmd.Source } else { $gh = "C:\Program Files\GitHub CLI\gh.exe" }
     if (-not (Test-Path $gh)) { throw "gh CLI not found. Install: winget install GitHub.cli" }
 
     # Strip the protocol + host to get "owner/repo"
