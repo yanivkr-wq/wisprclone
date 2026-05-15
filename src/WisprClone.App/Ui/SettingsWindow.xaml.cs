@@ -52,21 +52,23 @@ public partial class SettingsWindow : Window
         HotkeyCombo.SelectedIndex = _settings.HotkeyMode == HotkeyMode.PushToTalk ? 0 : 1;
         MaxSlider.Value = Math.Clamp(_settings.MaxRecordingSeconds, (int)MaxSlider.Minimum, (int)MaxSlider.Maximum);
 
-        // Match the saved hotkey to one of the combo items by Tag; fall back
-        // to the default Ctrl+Win if the stored value is unrecognised.
-        HotkeyKeyCombo.SelectedIndex = 0;
-        for (int i = 0; i < HotkeyKeyCombo.Items.Count; i++)
-        {
-            if (HotkeyKeyCombo.Items[i] is ComboBoxItem item
-                && string.Equals(item.Tag?.ToString(), _settings.Hotkey, StringComparison.OrdinalIgnoreCase))
-            {
-                HotkeyKeyCombo.SelectedIndex = i;
-                break;
-            }
-        }
+        _stagedHotkey = HotkeySpec.Parse(_settings.Hotkey);
+        HotkeyDisplay.Text = _stagedHotkey.DisplayName;
 
         OfferRefinementCheck.IsChecked = _settings.OfferRefinement;
         KeepWavsCheck.IsChecked = _settings.KeepWavFiles;
+    }
+
+    private HotkeySpec _stagedHotkey = HotkeySpec.Default;
+
+    private void OnChangeHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new HotkeyCaptureDialog(_stagedHotkey) { Owner = this };
+        if (dlg.ShowDialog() == true && dlg.Captured != null)
+        {
+            _stagedHotkey = dlg.Captured;
+            HotkeyDisplay.Text = _stagedHotkey.DisplayName;
+        }
     }
 
     private void OnSave_Click(object sender, RoutedEventArgs e)
@@ -86,7 +88,7 @@ public partial class SettingsWindow : Window
         var selectedTag = (HotkeyCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "PushToTalk";
         var mode = selectedTag == "Toggle" ? HotkeyMode.Toggle : HotkeyMode.PushToTalk;
         var maxSec = (int)MaxSlider.Value;
-        var hotkeyTag = (HotkeyKeyCombo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "Ctrl+Win";
+        var hotkeyTag = _stagedHotkey.ToStorageString();
         var hotkeyChanged = !string.Equals(_settings.Hotkey, hotkeyTag, StringComparison.OrdinalIgnoreCase);
 
         _settings.OpenAiApiKey = key;

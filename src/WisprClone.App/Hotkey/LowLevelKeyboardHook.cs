@@ -1,18 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace WisprClone.App.Hotkey;
 
 /// <summary>
-/// Global low-level keyboard hook (WH_KEYBOARD_LL). Generalised to support
-/// either a modifier-only chord (Ctrl+Win) or a single key (Right Alt, F8…)
-/// as defined by the active <see cref="HotkeySpec"/>.
+/// Global low-level keyboard hook (WH_KEYBOARD_LL). Tracks every currently-held
+/// virtual key in a HashSet and, on every key change, asks the current
+/// <see cref="HotkeySpec"/> whether the chord is satisfied. Fires
+/// ChordPressed when it becomes satisfied; ChordReleased when it stops being.
 ///
-/// While the chord is active AND <see cref="SwallowConflicts"/> is true, AND
-/// the hotkey happens to be Ctrl+Win, the hook eats Windows-shell shortcuts
-/// (Win+Ctrl+arrow / D / F4) so virtual-desktop switching doesn't trigger
-/// mid-dictation. For non-Ctrl+Win hotkeys there's nothing to suppress.
+/// When the active hotkey is the Ctrl+Win chord, AND <see cref="SwallowConflicts"/>
+/// is true, the hook also eats Win+Ctrl+arrow / D / F4 to prevent Windows
+/// virtual-desktop shortcuts firing mid-dictation. For other hotkeys there's
+/// nothing to swallow.
 /// </summary>
 public sealed class LowLevelKeyboardHook : IDisposable
 {
@@ -22,32 +24,25 @@ public sealed class LowLevelKeyboardHook : IDisposable
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int WM_SYSKEYUP = 0x0105;
 
-    private const int VK_LCONTROL = 0xA2;
-    private const int VK_RCONTROL = 0xA3;
-    private const int VK_LWIN = 0x5B;
-    private const int VK_RWIN = 0x5C;
-
     private readonly LowLevelKeyboardProc _proc;
     private IntPtr _hookId = IntPtr.Zero;
 
-    private bool _ctrlDown;
-    private bool _winDown;
-    private bool _singleKeyDown;
+    private readonly HashSet<int> _pressed = new();
     private bool _chordActive;
 
-    private readonly HotkeySpec _spec;
+    private HotkeySpec _spec;
 
     public event Action? ChordPressed;
     public event Action? ChordReleased;
 
     /// <summary>
-    /// When true and the chord is currently held, this hook eats
-    /// arrow/D/F4 key presses to prevent virtual-desktop shortcuts.
-    /// Only meaningful for the Ctrl+Win chord.
+    /// When true and the active hotkey is Ctrl+Win, the hook swallows
+    /// Win+Ctrl+arrow / D / F4 to prevent virtual-desktop shortcuts.
+    /// Has no effect for other hotkeys.
     /// </summary>
     public bool SwallowConflicts { get; set; }
 
-    public LowLevelKeyboardHook() : this(HotkeySpec.CtrlWin) { }
+    public LowLevelKeyboardHook() : this(HotkeySpec.Default) { }
 
     public LowLevelKeyboardHook(HotkeySpec spec)
     {
@@ -78,64 +73,34 @@ public sealed class LowLevelKeyboardHook : IDisposable
         int vk = (int)kb.vkCode;
 
         bool isDown = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
-        bool isUp = msg == WM_KEYUP || msg == WM_SYSKEYUP;
+        bool isUp   = msg == WM_KEYUP   || msg == WM_SYSKEYUP;
 
-        if (_spec.IsChord)
+        if (isDown) _pressed.Add(vk);
+        else if (isUp) _pressed.Remove(vk);
+
+        // Optionally suppress Windows shell shortcuts while a Ctrl+Win chord
+        // is active. Only meaningful when the user's hotkey actually IS
+        // Ctrl+Win — otherwise their hotkey doesn't conflict with these.
+        if (_chordActive && SwallowConflicts && isDown
+            && IsCtrlWinChord(_spec)
+            && (vk == HotkeySpec.VK_LSHIFT /* placeholder, never matches */ ||
+                vk == 0x25 || vk == 0x26 || vk == 0x27 || vk == 0x28 /* arrows */ ||
+                vk == 0x44 /* D */ || vk == 0x73 /* F4 */))
         {
-            // Modifier-only chord (e.g. Ctrl+Win).
-            if (vk == VK_LCONTROL || vk == VK_RCONTROL)
-            {
-                if (isDown) _ctrlDown = true;
-                else if (isUp) _ctrlDown = false;
-                UpdateChordState();
-            }
-            else if (vk == VK_LWIN || vk == VK_RWIN)
-            {
-                if (isDown) _winDown = true;
-                else if (isUp) _winDown = false;
-                UpdateChordState();
-            }
-            else if (_chordActive && SwallowConflicts && isDown
-                     && _spec.RequireCtrl && _spec.RequireWin
-                     && (vk == HotkeySpec.VK_LEFT  || vk == HotkeySpec.VK_RIGHT
-                         || vk == HotkeySpec.VK_UP || vk == HotkeySpec.VK_DOWN
-                         || vk == HotkeySpec.VK_D  || vk == HotkeySpec.VK_F4))
-            {
-                // Swallow virtual-desktop shortcuts while Ctrl+Win is held.
-                return new IntPtr(1);
-            }
-        }
-        else
-        {
-            // Single-key hotkey (e.g. Right Alt, F8).
-            if (vk == _spec.Key!.Value)
-            {
-                if (isDown && !_singleKeyDown)
-                {
-                    _singleKeyDown = true;
-                    _chordActive = true;
-                    SafeRaise(ChordPressed);
-                }
-                else if (isUp && _singleKeyDown)
-                {
-                    _singleKeyDown = false;
-                    _chordActive = false;
-                    SafeRaise(ChordReleased);
-                }
-            }
+            // Mark handled; don't propagate to the shell.
+            return new IntPtr(1);
         }
 
+        UpdateChordState();
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
+    private static bool IsCtrlWinChord(HotkeySpec spec) =>
+        spec.Ctrl && spec.Win && !spec.Alt && !spec.Shift && spec.Key == null;
+
     private void UpdateChordState()
     {
-        // All required modifiers must be held. Extra modifiers being held
-        // (e.g. user pressing Ctrl while their hotkey is Win-only) don't
-        // matter — the chord is still considered active.
-        bool active = (!_spec.RequireCtrl || _ctrlDown)
-                      && (!_spec.RequireWin || _winDown);
-
+        bool active = _spec.Matches(_pressed);
         if (active && !_chordActive)
         {
             _chordActive = true;
@@ -147,6 +112,23 @@ public sealed class LowLevelKeyboardHook : IDisposable
             SafeRaise(ChordReleased);
         }
     }
+
+    /// <summary>
+    /// Replace the active hotkey at runtime (e.g. after the user changes it in
+    /// Settings). Resets the chord-active state.
+    /// </summary>
+    public void UpdateSpec(HotkeySpec spec)
+    {
+        _spec = spec;
+        _pressed.Clear();
+        if (_chordActive)
+        {
+            _chordActive = false;
+            SafeRaise(ChordReleased);
+        }
+    }
+
+    public HotkeySpec ActiveSpec => _spec;
 
     private static void SafeRaise(Action? evt)
     {

@@ -123,7 +123,7 @@ internal static class Program
         _refiner = new RefinementService(apiKey, settings.RefinementModel);
 
         var hotkeySpec = HotkeySpec.Parse(settings.Hotkey);
-        Log.Information("Hotkey: {Hotkey}", hotkeySpec.Name);
+        Log.Information("Hotkey: {Hotkey}", hotkeySpec.DisplayName);
         _hook = new LowLevelKeyboardHook(hotkeySpec);
         _mic = new MicCapture();
         _coordinator = new DictationCoordinator(
