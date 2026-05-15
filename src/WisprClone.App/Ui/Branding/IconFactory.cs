@@ -18,10 +18,10 @@ public static class IconFactory
 {
     private static readonly int[] DefaultSizes = { 16, 32, 48, 64, 256 };
 
-    // Brand colours — v0.2.3: purple gradient (real OTA test). Was teal-green
-    // in v0.2.1, blue in v0.2.0.
-    private static readonly Color BrandBlueTop    = Color.FromArgb(0xFF, 0xA0, 0x4D, 0xEA);
-    private static readonly Color BrandBlueBottom = Color.FromArgb(0xFF, 0x6A, 0x2D, 0xA8);
+    // Brand colours — v0.2.4: back to teal-green gradient (user's pick) +
+    // new sound-wave-bars glyph instead of the microphone.
+    private static readonly Color BrandBlueTop    = Color.FromArgb(0xFF, 0x3D, 0xDF, 0xAE);
+    private static readonly Color BrandBlueBottom = Color.FromArgb(0xFF, 0x1A, 0x9F, 0x7B);
 
     public static void SaveAsIco(string path) => SaveAsIco(path, DefaultSizes);
 
@@ -81,9 +81,39 @@ public static class IconFactory
         g.Clear(Color.Transparent);
 
         DrawBackground(g, size);
-        DrawMicrophone(g, size);
+        DrawSoundWaveBars(g, size);
 
         return bmp;
+    }
+
+    /// <summary>
+    /// Five vertical capsules of varying heights, centred — a stylised audio
+    /// equaliser. Cleaner at 16×16 than the mic glyph and instantly reads as
+    /// "audio / voice".
+    /// </summary>
+    private static void DrawSoundWaveBars(Graphics g, int size)
+    {
+        float midY = size / 2f;
+        float barWidth = size * 0.09f;
+        float gap = size * 0.04f;
+        float[] heights = { 0.32f, 0.54f, 0.74f, 0.54f, 0.32f };
+
+        int n = heights.Length;
+        float totalWidth = n * barWidth + (n - 1) * gap;
+        float firstX = (size - totalWidth) / 2f + barWidth / 2f;
+
+        using var pen = new Pen(Color.White, barWidth)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round
+        };
+
+        for (int i = 0; i < n; i++)
+        {
+            float x = firstX + i * (barWidth + gap);
+            float halfH = (heights[i] * size) / 2f;
+            g.DrawLine(pen, x, midY - halfH, x, midY + halfH);
+        }
     }
 
     private static byte[] RenderSizeFromMaster(Bitmap master, int size)

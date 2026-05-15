@@ -15,8 +15,8 @@ $root = Split-Path $PSScriptRoot -Parent
 $abs  = Join-Path $root $OutPath
 
 # ---- Brand colours (mirror IconFactory.cs) ----
-$top    = [System.Drawing.Color]::FromArgb(0xFF, 0xA0, 0x4D, 0xEA)
-$bottom = [System.Drawing.Color]::FromArgb(0xFF, 0x6A, 0x2D, 0xA8)
+$top    = [System.Drawing.Color]::FromArgb(0xFF, 0x3D, 0xDF, 0xAE)
+$bottom = [System.Drawing.Color]::FromArgb(0xFF, 0x1A, 0x9F, 0x7B)
 
 function New-MasterBitmap {
     param([int] $size)
@@ -43,50 +43,27 @@ function New-MasterBitmap {
     $g.FillEllipse($highlight, [single]($size * 0.18), [single]($size * 0.10), [single]($size * 0.64), [single]($size * 0.30))
     $highlight.Dispose()
 
-    # microphone in white
+    # Sound-wave bars in white — five vertical capsules of varying heights.
     $white = [System.Drawing.Color]::White
-    $fill  = New-Object System.Drawing.SolidBrush $white
-    $pen   = New-Object System.Drawing.Pen $white, ([single]($size * 0.07))
+    $barWidth = [single]($size * 0.09)
+    $pen   = New-Object System.Drawing.Pen $white, $barWidth
     $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
     $pen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.LineJoin = [System.Drawing.Drawing2D.LineJoin]::Round
 
-    $midX = [single]($size / 2.0)
+    $midY = [single]($size / 2.0)
+    $gap  = [single]($size * 0.04)
+    $heights = @(0.32, 0.54, 0.74, 0.54, 0.32)
 
-    # Capsule (rounded rectangle)
-    $capW = [single]($size * 0.28)
-    $capH = [single]($size * 0.46)
-    $capX = $midX - $capW / 2.0
-    $capY = [single]($size * 0.16)
-    $r    = $capW / 2.0
-    $d    = $r * 2.0
+    $n = $heights.Count
+    $totalWidth = $n * $barWidth + ($n - 1) * $gap
+    $firstX = ($size - $totalWidth) / 2.0 + $barWidth / 2.0
 
-    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-    $path.AddArc($capX,              $capY,              $d, $d, 180, 90)
-    $path.AddArc($capX + $capW - $d, $capY,              $d, $d, 270, 90)
-    $path.AddArc($capX + $capW - $d, $capY + $capH - $d, $d, $d,   0, 90)
-    $path.AddArc($capX,              $capY + $capH - $d, $d, $d,  90, 90)
-    $path.CloseFigure()
-    $g.FillPath($fill, $path)
-    $path.Dispose()
+    for ($i = 0; $i -lt $n; $i++) {
+        $x = [single]($firstX + $i * ($barWidth + $gap))
+        $halfH = [single]($heights[$i] * $size / 2.0)
+        $g.DrawLine($pen, $x, $midY - $halfH, $x, $midY + $halfH)
+    }
 
-    # U-shape cradle
-    $cradleW = [single]($size * 0.52)
-    $cradleH = [single]($size * 0.22)
-    $cradleX = $midX - $cradleW / 2.0
-    $cradleY = [single]($size * 0.52)
-    $g.DrawArc($pen, $cradleX, $cradleY, $cradleW, $cradleH, 0, 180)
-
-    # Stem
-    $stemTop    = $cradleY + $cradleH / 2.0
-    $stemBottom = [single]($size * 0.84)
-    $g.DrawLine($pen, $midX, $stemTop, $midX, $stemBottom)
-
-    # Base
-    $baseHalf = [single]($size * 0.16)
-    $g.DrawLine($pen, $midX - $baseHalf, $stemBottom, $midX + $baseHalf, $stemBottom)
-
-    $fill.Dispose()
     $pen.Dispose()
     $g.Dispose()
     return $bmp
