@@ -35,3 +35,6 @@ installer/Output/
 
 # Velopack release artifacts (large; live on GitHub Releases instead)
 releases/
+
+# Throwaway preview/scratch dirs
+tmp/
