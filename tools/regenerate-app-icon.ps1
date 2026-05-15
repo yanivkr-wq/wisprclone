@@ -15,8 +15,8 @@ $root = Split-Path $PSScriptRoot -Parent
 $abs  = Join-Path $root $OutPath
 
 # ---- Brand colours (mirror IconFactory.cs) ----
-$top    = [System.Drawing.Color]::FromArgb(0xFF, 0x3D, 0xDF, 0xAE)
-$bottom = [System.Drawing.Color]::FromArgb(0xFF, 0x1A, 0x9F, 0x7B)
+$top    = [System.Drawing.Color]::FromArgb(0xFF, 0x5B, 0x8F, 0xF9)
+$bottom = [System.Drawing.Color]::FromArgb(0xFF, 0x2B, 0x6C, 0xB0)
 
 function New-MasterBitmap {
     param([int] $size)
@@ -43,28 +43,47 @@ function New-MasterBitmap {
     $g.FillEllipse($highlight, [single]($size * 0.18), [single]($size * 0.10), [single]($size * 0.64), [single]($size * 0.30))
     $highlight.Dispose()
 
-    # Sound-wave bars in white — five vertical capsules of varying heights.
+    # Speech bubble (white rounded rect) with three accent dots + tail.
     $white = [System.Drawing.Color]::White
-    $barWidth = [single]($size * 0.09)
-    $pen   = New-Object System.Drawing.Pen $white, $barWidth
-    $pen.StartCap = [System.Drawing.Drawing2D.LineCap]::Round
-    $pen.EndCap   = [System.Drawing.Drawing2D.LineCap]::Round
+    $fill = New-Object System.Drawing.SolidBrush $white
 
-    $midY = [single]($size / 2.0)
-    $gap  = [single]($size * 0.04)
-    $heights = @(0.32, 0.54, 0.74, 0.54, 0.32)
+    $bubbleW = [single]($size * 0.62)
+    $bubbleH = [single]($size * 0.45)
+    $bubbleX = [single](($size - $bubbleW) / 2.0)
+    $bubbleY = [single]($size * 0.22)
+    $r = [single]($size * 0.10)
+    $d = $r * 2
 
-    $n = $heights.Count
-    $totalWidth = $n * $barWidth + ($n - 1) * $gap
-    $firstX = ($size - $totalWidth) / 2.0 + $barWidth / 2.0
+    $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $path.AddArc($bubbleX,                 $bubbleY,                 $d, $d, 180, 90)
+    $path.AddArc($bubbleX + $bubbleW - $d, $bubbleY,                 $d, $d, 270, 90)
+    $path.AddArc($bubbleX + $bubbleW - $d, $bubbleY + $bubbleH - $d, $d, $d,   0, 90)
+    $path.AddArc($bubbleX,                 $bubbleY + $bubbleH - $d, $d, $d,  90, 90)
+    $path.CloseFigure()
+    $g.FillPath($fill, $path)
+    $path.Dispose()
 
-    for ($i = 0; $i -lt $n; $i++) {
-        $x = [single]($firstX + $i * ($barWidth + $gap))
-        $halfH = [single]($heights[$i] * $size / 2.0)
-        $g.DrawLine($pen, $x, $midY - $halfH, $x, $midY + $halfH)
+    $tailY  = [single]($bubbleY + $bubbleH)
+    $tailP1 = New-Object System.Drawing.PointF ([single]($bubbleX + $bubbleW * 0.30)), $tailY
+    $tailP2 = New-Object System.Drawing.PointF ([single]($bubbleX + $bubbleW * 0.55)), $tailY
+    $tailP3 = New-Object System.Drawing.PointF ([single]($bubbleX + $bubbleW * 0.35)), ([single]($tailY + $size * 0.13))
+    $tailPath = New-Object System.Drawing.Drawing2D.GraphicsPath
+    $tailPath.AddPolygon(@($tailP1, $tailP2, $tailP3))
+    $g.FillPath($fill, $tailPath)
+    $tailPath.Dispose()
+
+    # Three dots in brand top color
+    $dotR = [single]($size * 0.045)
+    $cx = [single]($bubbleX + $bubbleW / 2.0)
+    $cy = [single]($bubbleY + $bubbleH / 2.0)
+    $spacing = [single]($size * 0.14)
+    $accent = New-Object System.Drawing.SolidBrush $top
+    foreach ($dx in @(-1, 0, 1)) {
+        $g.FillEllipse($accent, [single]($cx + $dx * $spacing - $dotR), [single]($cy - $dotR), [single]($dotR * 2), [single]($dotR * 2))
     }
 
-    $pen.Dispose()
+    $fill.Dispose()
+    $accent.Dispose()
     $g.Dispose()
     return $bmp
 }

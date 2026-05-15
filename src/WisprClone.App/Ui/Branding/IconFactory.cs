@@ -18,10 +18,9 @@ public static class IconFactory
 {
     private static readonly int[] DefaultSizes = { 16, 32, 48, 64, 256 };
 
-    // Brand colours — v0.2.4: back to teal-green gradient (user's pick) +
-    // new sound-wave-bars glyph instead of the microphone.
-    private static readonly Color BrandBlueTop    = Color.FromArgb(0xFF, 0x3D, 0xDF, 0xAE);
-    private static readonly Color BrandBlueBottom = Color.FromArgb(0xFF, 0x1A, 0x9F, 0x7B);
+    // Brand colours — v0.2.5: royal blue gradient + speech bubble glyph.
+    private static readonly Color BrandBlueTop    = Color.FromArgb(0xFF, 0x5B, 0x8F, 0xF9);
+    private static readonly Color BrandBlueBottom = Color.FromArgb(0xFF, 0x2B, 0x6C, 0xB0);
 
     public static void SaveAsIco(string path) => SaveAsIco(path, DefaultSizes);
 
@@ -81,38 +80,58 @@ public static class IconFactory
         g.Clear(Color.Transparent);
 
         DrawBackground(g, size);
-        DrawSoundWaveBars(g, size);
+        DrawSpeechBubble(g, size);
 
         return bmp;
     }
 
     /// <summary>
-    /// Five vertical capsules of varying heights, centred — a stylised audio
-    /// equaliser. Cleaner at 16×16 than the mic glyph and instantly reads as
-    /// "audio / voice".
+    /// Speech bubble with three accent-coloured dots inside + a small tail.
+    /// Reads as "chat / dictation" at any size.
     /// </summary>
-    private static void DrawSoundWaveBars(Graphics g, int size)
+    private static void DrawSpeechBubble(Graphics g, int size)
     {
-        float midY = size / 2f;
-        float barWidth = size * 0.09f;
-        float gap = size * 0.04f;
-        float[] heights = { 0.32f, 0.54f, 0.74f, 0.54f, 0.32f };
+        var white = Color.White;
+        using var fill = new SolidBrush(white);
 
-        int n = heights.Length;
-        float totalWidth = n * barWidth + (n - 1) * gap;
-        float firstX = (size - totalWidth) / 2f + barWidth / 2f;
+        // Bubble (rounded rectangle)
+        float bubbleW = size * 0.62f;
+        float bubbleH = size * 0.45f;
+        float bubbleX = (size - bubbleW) / 2f;
+        float bubbleY = size * 0.22f;
+        float r = size * 0.10f;
+        float d = r * 2f;
 
-        using var pen = new Pen(Color.White, barWidth)
+        using (var path = new GraphicsPath())
         {
-            StartCap = LineCap.Round,
-            EndCap = LineCap.Round
-        };
+            path.AddArc(bubbleX,                bubbleY,                d, d, 180, 90);
+            path.AddArc(bubbleX + bubbleW - d,  bubbleY,                d, d, 270, 90);
+            path.AddArc(bubbleX + bubbleW - d,  bubbleY + bubbleH - d,  d, d,   0, 90);
+            path.AddArc(bubbleX,                bubbleY + bubbleH - d,  d, d,  90, 90);
+            path.CloseFigure();
+            g.FillPath(fill, path);
+        }
 
-        for (int i = 0; i < n; i++)
+        // Tail (triangle pointing down-left)
+        var tailY  = bubbleY + bubbleH;
+        var tailP1 = new PointF(bubbleX + bubbleW * 0.30f, tailY);
+        var tailP2 = new PointF(bubbleX + bubbleW * 0.55f, tailY);
+        var tailP3 = new PointF(bubbleX + bubbleW * 0.35f, tailY + size * 0.13f);
+        using (var tailPath = new GraphicsPath())
         {
-            float x = firstX + i * (barWidth + gap);
-            float halfH = (heights[i] * size) / 2f;
-            g.DrawLine(pen, x, midY - halfH, x, midY + halfH);
+            tailPath.AddPolygon(new[] { tailP1, tailP2, tailP3 });
+            g.FillPath(fill, tailPath);
+        }
+
+        // Three dots in brand-top colour (so they stand out against the white bubble)
+        using var accent = new SolidBrush(BrandBlueTop);
+        float dotR = size * 0.045f;
+        float cx = bubbleX + bubbleW / 2f;
+        float cy = bubbleY + bubbleH / 2f;
+        float spacing = size * 0.14f;
+        for (int i = -1; i <= 1; i++)
+        {
+            g.FillEllipse(accent, cx + i * spacing - dotR, cy - dotR, dotR * 2, dotR * 2);
         }
     }
 

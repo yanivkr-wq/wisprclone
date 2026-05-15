@@ -27,6 +27,13 @@ public partial class RefinementPanel : Window
     [DllImport("user32.dll", SetLastError = true)]
     private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
     private const int AutoDismissMs = 8000;
 
     private readonly string _originalText;
@@ -34,6 +41,12 @@ public partial class RefinementPanel : Window
     private readonly ClipboardInjector _injector;
     private readonly DispatcherTimer _autoDismiss;
     private bool _busy;
+
+    // The window that had focus when the panel was shown — typically the app
+    // the user just dictated into. We restore focus to it before sending
+    // Shift+Left × N and Ctrl+V so the keys go where the original paste went,
+    // not into our own panel (which gains focus when the user clicks a button).
+    private IntPtr _targetHwnd = IntPtr.Zero;
 
     public RefinementPanel(string originalText, RefinementService refiner, ClipboardInjector injector)
     {
@@ -61,6 +74,15 @@ public partial class RefinementPanel : Window
         var hwnd = new WindowInteropHelper(this).Handle;
         var ex = GetWindowLong(hwnd, GWL_EXSTYLE);
         SetWindowLong(hwnd, GWL_EXSTYLE, ex | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+
+        // Capture the currently-foreground window — that's the app the user
+        // just dictated into. We'll restore focus to it before sending the
+        // Shift+Left / Ctrl+V replacement sequence so it lands where the
+        // dictation actually went.
+        _targetHwnd = GetForegroundWindow();
+        // If the foreground at Loaded is ourselves, fall back to whatever
+        // came right before. (Shouldn't happen with NoActivate, but defensive.)
+        if (_targetHwnd == hwnd) _targetHwnd = IntPtr.Zero;
 
         // Position at bottom-center of active monitor, like the pill.
         UpdateLayout();
@@ -115,13 +137,26 @@ public partial class RefinementPanel : Window
         Log.Information("Refinement {Style}: \"{Refined}\"", style, refined);
 
         // Replace previously-pasted text:
-        //   1) select last N chars in destination app via Shift+Left
-        //   2) Ctrl+V the refined text (already on clipboard via InjectText)
+        //   1) restore focus to the app that received the original paste
+        //      (clicking our button shifted focus to us — we'd send keys to
+        //      ourselves otherwise),
+        //   2) wait a tick for the focus change to settle,
+        //   3) select last N chars in destination app via Shift+Left,
+        //   4) Ctrl+V the refined text (already on clipboard via InjectText).
         try
         {
+            if (_targetHwnd != IntPtr.Zero)
+            {
+                SetForegroundWindow(_targetHwnd);
+                await Task.Delay(60).ConfigureAwait(true);  // let focus actually transfer
+            }
+
             // Drop the trailing space the cleanup pass added so we count chars accurately.
             var originalLen = _originalText.TrimEnd().Length;
             SendInputHelper.SendShiftLeft(originalLen);
+
+            // Tiny pause so the selection registers before Ctrl+V replaces it.
+            await Task.Delay(40).ConfigureAwait(true);
 
             // Add a single trailing space to refined too, to match dictation style.
             var refinedWithSpace = refined.TrimEnd() + " ";
