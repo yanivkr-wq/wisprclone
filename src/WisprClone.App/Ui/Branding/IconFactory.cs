@@ -18,9 +18,10 @@ public static class IconFactory
 {
     private static readonly int[] DefaultSizes = { 16, 32, 48, 64, 256 };
 
-    // Brand colours.
-    private static readonly Color BrandBlueTop    = Color.FromArgb(0xFF, 0x3D, 0x7B, 0xEA);
-    private static readonly Color BrandBlueBottom = Color.FromArgb(0xFF, 0x1D, 0x4E, 0xC7);
+    // Brand colours — v0.2.1: teal-green to make the OTA update visually
+    // obvious. Originally a blue gradient.
+    private static readonly Color BrandBlueTop    = Color.FromArgb(0xFF, 0x3D, 0xDF, 0xAE);
+    private static readonly Color BrandBlueBottom = Color.FromArgb(0xFF, 0x1A, 0x9F, 0x7B);
 
     public static void SaveAsIco(string path) => SaveAsIco(path, DefaultSizes);
 
