@@ -95,8 +95,9 @@ public partial class RefinementPanel : Window
         if (_targetHwnd == hwnd) _targetHwnd = IntPtr.Zero;
 
         // Position at bottom-center of active monitor, like the pill.
+        // DIP-converted so it lands correctly on scaled displays.
         UpdateLayout();
-        var workArea = MonitorHelper.GetActiveMonitorWorkArea();
+        var workArea = MonitorHelper.GetActiveMonitorWorkAreaInDips(this);
         Left = workArea.Left + (workArea.Width - ActualWidth) / 2.0;
         Top = workArea.Bottom - ActualHeight - 60;
 
@@ -169,7 +170,7 @@ public partial class RefinementPanel : Window
             // pass added) so we select EVERY character we pasted — otherwise
             // the first char gets left behind glued to the refined text.
             var originalLen = _originalText.Length;
-            bool isRtl = IsRtlAtEnd(_originalText);
+            bool isRtl = ContainsRtl(_originalText);
 
             Log.Debug("Refine replace: len={Len}, rtl={Rtl}, dir={Dir}",
                 originalLen, isRtl, isRtl ? "Shift+Right" : "Shift+Left");
@@ -195,20 +196,21 @@ public partial class RefinementPanel : Window
     }
 
     /// <summary>
-    /// True when the text (ignoring trailing whitespace) ends with a Hebrew /
-    /// Arabic / Syriac character — meaning the caret after paste is at the
-    /// visual-left of the text and we need Shift+Right (not Shift+Left) to
-    /// select backwards into it.
+    /// True when the text contains ANY Hebrew / Arabic / Syriac character.
+    /// We use "contains" rather than "ends with" because RTL sentences often
+    /// end with direction-neutral punctuation (e.g. "...אתמול.") and a strict
+    /// last-char check would mis-detect those as LTR.
     /// </summary>
-    private static bool IsRtlAtEnd(string text)
+    private static bool ContainsRtl(string text)
     {
-        for (int i = text.Length - 1; i >= 0; i--)
+        foreach (char c in text)
         {
-            char c = text[i];
-            if (char.IsWhiteSpace(c)) continue;
-            return (c >= 0x0590 && c <= 0x05FF)    // Hebrew
-                || (c >= 0x0600 && c <= 0x06FF)    // Arabic
-                || (c >= 0x0700 && c <= 0x074F);   // Syriac
+            if ((c >= 0x0590 && c <= 0x05FF)    // Hebrew
+             || (c >= 0x0600 && c <= 0x06FF)    // Arabic
+             || (c >= 0x0700 && c <= 0x074F))   // Syriac
+            {
+                return true;
+            }
         }
         return false;
     }

@@ -89,9 +89,12 @@ public partial class FloatingPill : Window
 
         UpdateLayout();
 
-        var workArea = MonitorHelper.GetActiveMonitorWorkArea();
+        // Use DPI-converted work area so positioning is correct on scaled
+        // displays (1.25× / 1.5× / 2×). Mixing physical pixels with WPF DIPs
+        // pushes the pill off-screen on most modern laptops.
+        var workArea = MonitorHelper.GetActiveMonitorWorkAreaInDips(this);
         Left = workArea.Left + (workArea.Width - ActualWidth) / 2.0;
-        Top = workArea.Bottom - ActualHeight - 60; // 60 px above bottom
+        Top = workArea.Bottom - ActualHeight - 60; // 60 DIPs above bottom
 
         if (Visibility != Visibility.Visible)
         {

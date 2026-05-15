@@ -1,16 +1,41 @@
 using System;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
 
 namespace WisprClone.App.Ui;
 
 /// <summary>
 /// Win32 helpers to find the screen the user's cursor is currently on, so
 /// the floating pill appears on the monitor they're actually working on
-/// (not always the primary).
+/// (not always the primary). Returns physical-pixel rects from Win32 plus
+/// a DPI-aware conversion so WPF (which positions in DIPs) places windows
+/// correctly on high-DPI / scaled displays.
 /// </summary>
 internal static class MonitorHelper
 {
+    [DllImport("user32.dll")]
+    private static extern int GetDpiForWindow(IntPtr hwnd);
+
+    /// <summary>
+    /// Returns the active monitor's work area converted from physical pixels
+    /// (Win32) to DIPs (WPF) using the DPI of the supplied window. Use this
+    /// when assigning to <see cref="Window.Left"/> / <see cref="Window.Top"/>.
+    /// </summary>
+    public static Rect GetActiveMonitorWorkAreaInDips(Window window)
+    {
+        var physical = GetActiveMonitorWorkArea();
+        var hwnd = new WindowInteropHelper(window).Handle;
+        int dpi = hwnd != IntPtr.Zero ? GetDpiForWindow(hwnd) : 96;
+        if (dpi <= 0) dpi = 96;
+        double scale = dpi / 96.0;
+        return new Rect(
+            physical.X / scale,
+            physical.Y / scale,
+            physical.Width / scale,
+            physical.Height / scale);
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT
     {
